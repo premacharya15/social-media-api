@@ -1,7 +1,7 @@
 import User from '../models/userModel.js';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import { generateOTP, sendOTPEmail } from '../services/otpService.js';
+import { generateToken } from '../utils/generateToken.js';
 
 export const signUp = async (req, res) => {
   const { name, email, phoneNumber, dateOfBirth, password } = req.body;
@@ -29,7 +29,9 @@ export const signUp = async (req, res) => {
 
     await sendOTPEmail(email, otp);
 
-    res.status(201).json({ message: 'User created, OTP sent' });
+    const token = generateToken({ userId: user._id }, '10m');
+
+    res.status(201).json({ message: 'User created, OTP sent', token });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -62,7 +64,7 @@ export const login = async (req, res) => {
     const user = await User.findOne({ email });
 
     if (!user) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+      return res.status(400).json({ message: 'User not exists' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -80,14 +82,23 @@ export const login = async (req, res) => {
       // Resend the OTP email
       await sendOTPEmail(email, otp);
 
-      return res.status(400).json({ message: 'User not verified. OTP resent.' });
+      const token = generateToken({ userId: user._id }, '10m');
+
+      return res.status(400).json({ message: 'User not verified. OTP resent.', token });
     }
 
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-      expiresIn: '1h',
-    });
+    const token = generateToken({ userId: user._id }, '1h');
 
-    res.status(200).json({ token });
+    const userData = {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      dateOfBirth: user.dateOfBirth,
+      verified: user.verified
+    };
+
+    res.status(200).json({ token, user: userData });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

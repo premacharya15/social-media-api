@@ -6,16 +6,17 @@ export const protect = (req, res, next) => {
     return res.status(401).json({ message: 'Authorization header is missing' });
   }
 
-  const token = authHeader.replace('Bearer ', '');
-  if (!token) {
-    return res.status(401).json({ message: 'No token, authorization denied' });
-  }
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded.user;
-    next();
-  } catch (error) {
-    res.status(401).json({ message: 'Token is not valid' });
+  const parts = authHeader.split(' ');
+  if (parts.length === 2 && parts[0] === 'Bearer') {
+    const token = parts[1];
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      req.user = decoded;
+      next();
+    } catch (error) {
+      res.status(401).json({ message: 'Token is not valid' });
+    }
+  } else {
+    return res.status(401).json({ message: 'Token format is incorrect' });
   }
 };
