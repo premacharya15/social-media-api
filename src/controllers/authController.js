@@ -72,7 +72,15 @@ export const login = async (req, res) => {
     }
 
     if (!user.verified) {
-      return res.status(400).json({ message: 'User not verified' });
+      // Generate a new OTP
+      const otp = generateOTP();
+      user.otp = otp;
+      await user.save();
+
+      // Resend the OTP email
+      await sendOTPEmail(email, otp);
+
+      return res.status(400).json({ message: 'User not verified. OTP resent.' });
     }
 
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
