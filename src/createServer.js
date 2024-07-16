@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import { json, urlencoded } from 'express';
 import authRoutes from './routes/authRoutes.js';
 import errorHandler from './middleware/errorHandler.js';
+import cors from 'cors';
 
 export async function createServer() {
   console.log(' ')
@@ -13,6 +14,13 @@ export async function createServer() {
 
   // Initialize the app
   const app = express();
+
+  // Configure CORS
+  app.use(cors({
+    origin: '*', // This allows all domains. For production, specify allowed domains.
+    methods: ['GET', 'POST', 'PUT', 'DELETE'], // Specify HTTP methods allowed.
+    allowedHeaders: ['Content-Type', 'Authorization']
+  }));
 
   // Database Connection
   try {
@@ -25,8 +33,8 @@ export async function createServer() {
   app.use(json());
   app.use(urlencoded({ extended: true }));
 
-  // Routes
-  app.use('/api/auth', authRoutes);
+  // Routes with versioning
+  app.use('/api/v1/auth', authRoutes);
 
   // Basic route
   app.get('/', (req, res) => {

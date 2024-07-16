@@ -29,7 +29,7 @@ export const signUp = async (req, res) => {
 
     await sendOTPEmail(email, otp);
 
-    const token = generateToken({ userId: user._id }, '10m');
+    const token = generateToken({ userId: user._id }, '1h');
 
     res.status(201).json({ message: 'User created, OTP sent', token });
   } catch (error) {
@@ -82,12 +82,12 @@ export const login = async (req, res) => {
       // Resend the OTP email
       await sendOTPEmail(email, otp);
 
-      const token = generateToken({ userId: user._id }, '10m');
+      const token = generateToken({ userId: user._id }, '1h');
 
       return res.status(400).json({ message: 'User not verified. OTP resent.', token });
     }
 
-    const token = generateToken({ userId: user._id }, '1h');
+    const token = generateToken({ userId: user._id }, '1d');
 
     const userData = {
       id: user._id,
