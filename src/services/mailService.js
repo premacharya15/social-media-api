@@ -182,37 +182,118 @@ export const sendResetEmail = async (email, resetLink) => {
     to: email,
     subject: "Password Reset Request",
     html: `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <style>
-          body { font-family: Arial, sans-serif; background-color: #f2f2f2; margin: 0; padding: 0; }
-          .container { width: 100%; max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 20px; border: 1px solid #dddddd; border-radius: 5px; }
-          .header { text-align: center; padding: 10px 0; }
-          .header img { max-width: 150px; }
-          .content { text-align: center; padding: 20px; }
-          .content h1 { font-size: 24px; color: #333333; }
-          .content p { font-size: 16px; color: #666666; }
-          .button { display: inline-block; padding: 10px 20px; font-size: 16px; background-color: #007BFF; border-radius: 5px; text-decoration: none; }
-          .footer { text-align: center; padding: 10px 0; font-size: 12px; color: #999999; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <img src="https://lh3.googleusercontent.com/u/0/drive-viewer/AKGpihbgrHP0syyhJ7-tGWJUDN6embcKtJMcfb_o9Aj1Qv53QUzaj8s7rcGnVWokFbOFav_MuAsLs4QcurMuSP-ItrByp1N_8nNzfLA=w1920-h912" alt="Company Logo">
-          </div>
-          <div class="content">
-            <h1>Password Reset</h1>
-            <p>If you've lost your password or wish to reset it, use the link below to get started.</p>
-            <a href="${resetLink}" class="button" style="color: #ffffff !important;">Reset Your Password</a>
-          </div>
-          <div class="footer">
-            <p>If you did not request a password reset, you can safely ignore this email. Only a person with access to your email can reset your account password.</p>
-          </div>
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: Arial, sans-serif; background-color: #f2f2f2; margin: 0; padding: 0; }
+        .container { width: 100%; max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 20px 20px 20px 0px; border: 1px solid #dddddd; border-radius: 5px; }
+        .header { text-align: center; padding: 10px 0; }
+        .header img { max-width: 100%; height: auto; margin-bottom: 20px; }
+        .content { text-align: center; padding: 20px; }
+        .content h1 { font-size: 24px; color: #333333; margin: 0 0 10px 0; }
+        .content p { font-size: 16px; color: #666666; margin: 0 0 20px 0; }
+        .button { display: inline-block; padding: 10px 20px; font-size: 16px; background-color: #007BFF; border-radius: 5px; text-decoration: none; }
+        .footer { text-align: center; padding: 10px 10px 10px 25px; font-size: 12px; color: #999999; }
+    
+        @media only screen and (max-width: 768px) {
+          .container {
+            padding: 15px 15px 15px 0px;
+          }
+          .content h1 {
+            font-size: 20px;
+            margin: 0 0 8px 0;
+          }
+          .content p {
+            font-size: 14px;
+            margin: 0 0 15px 0;
+          }
+          .button {
+            padding: 8px 16px;
+            font-size: 14px;
+          }
+        }
+    
+        @media only screen and (max-width: 480px) {
+          .container {
+            padding: 10px 10px 10px 0px;
+          }
+          .header img {
+            max-width: 120px;
+          }
+          .content h1 {
+            font-size: 18px;
+            margin: 0 0 6px 0;
+          }
+          .content p {
+            font-size: 12px;
+            margin: 0 0 10px 0;
+          }
+          .button {
+            padding: 6px 12px;
+            font-size: 12px;
+          }
+        }
+    
+        @media only screen and (max-width: 320px) {
+          .container {
+            padding: 5px 5px 5px 0px;
+          }
+          .header img {
+            max-width: 100px;
+          }
+          .content h1 {
+            font-size: 16px;
+            margin: 0 0 4px 0;
+          }
+          .content p {
+            font-size: 10px;
+            margin: 0 0 8px 0;
+          }
+          .button {
+            padding: 4px 8px;
+            font-size: 10px;
+          }
+        }
+    
+        @media only screen and (max-width: 150px) {
+          .container {
+            padding: 2px 2px 2px 0px;
+          }
+          .header img {
+            max-width: 60px;
+          }
+          .content h1 {
+            font-size: 12px;
+            margin: 0 0 2px 0;
+          }
+          .content p {
+            font-size: 8px;
+            margin: 0 0 4px 0;
+          }
+          .button {
+            padding: 2px 4px;
+            font-size: 8px;
+          }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <img src="https://lh3.googleusercontent.com/u/0/drive-viewer/AKGpihbgrHP0syyhJ7-tGWJUDN6embcKtJMcfb_o9Aj1Qv53QUzaj8s7rcGnVWokFbOFav_MuAsLs4QcurMuSP-ItrByp1N_8nNzfLA=w1920-h912" alt="Company Logo">
         </div>
-      </body>
-      </html>
+        <div class="content">
+          <h1>Password Reset</h1>
+          <p>If you've lost your password or wish to reset it, use the link below to get started.</p>
+          <a href="${resetLink}" class="button" style="color: #ffffff !important;">Reset Your Password</a>
+        </div>
+        <div class="footer">
+          <p>If you did not request a password reset, you can safely ignore this email. Only a person with access to your email can reset your account password.</p>
+        </div>
+      </div>
+    </body>
+    </html>    
     `,
   };
 
