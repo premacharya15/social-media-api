@@ -1,6 +1,6 @@
 import User from '../models/userModel.js';
 import bcrypt from 'bcryptjs';
-import { generateOTP, sendOTPEmail } from '../services/otpService.js';
+import { generateOTP, sendOTPEmail, sendResetEmail } from '../services/mailService.js';
 import { generateToken } from '../utils/generateToken.js';
 import client from '../utils/redisClient.js';
 
@@ -102,7 +102,7 @@ export const login = async (req, res) => {
         dbUser.otp = otp;
         await dbUser.save();
         await sendOTPEmail(email, otp);
-        await client.set(email, JSON.stringify(dbUser), { EX: 3600 });
+        await client.set(email, JSON.stringify(dbUser), { EX: 3600 }); // Update cache with new OTP
         const token = generateToken({ userId: dbUser._id }, '1h');
         return res.status(400).json({ message: 'User not verified. OTP resent.', token });
       }
@@ -125,5 +125,46 @@ export const login = async (req, res) => {
     res.status(200).json({ token, user });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+export const forgotPassword = async (req, res) => {
+  const { email } = req.body;
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const resetToken = generateToken({ id: user._id }, '1h');
+    const resetUrl = `${process.env.BASE_URL}/reset-password/${resetToken}`;
+
+    await sendResetEmail(user.email, resetUrl);
+
+    res.status(200).json({ message: "Reset password link sent to your email address" });
+  } catch (error) {
+    res.status(500).json({ message: "Error sending password reset email", error: error.message });
+  }
+};
+
+export const resetPassword = async (req, res) => {
+  const { token } = req.params;
+  const { password } = req.body;
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+    user.password = hashedPassword;
+    await user.save();
+
+    res.status(200).json({ message: "Password reset successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Invalid or expired token" });
   }
 };
