@@ -1,6 +1,6 @@
 import User from '../models/userModel.js';
 import bcrypt from 'bcryptjs';
-import { generateOTP, sendOTPEmail, sendResetEmail } from '../services/mailService.js';
+import { generateOTP, sendOTPEmail } from '../services/mailService.js';
 import { generateToken } from '../utils/generateToken.js';
 import client from '../utils/redisClient.js';
 
@@ -10,7 +10,7 @@ export const signUp = async (req, res) => {
   try {
     const userExists = await User.findOne({ email });
     if (userExists) {
-      return res.status(400).json({ message: 'User already exists' });
+      return res.status(400).json({ message: 'User already exists!' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -32,7 +32,7 @@ export const signUp = async (req, res) => {
 
     const token = generateToken({ userId: user._id }, '1h');
 
-    res.status(201).json({ message: 'User created, OTP sent', token });
+    res.status(201).json({ message: 'User created, OTP sent!', token });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -45,7 +45,7 @@ export const verifyOTP = async (req, res) => {
     let user = await User.findOne({ email });
 
     if (!user || user.otp !== otp) {
-      return res.status(400).json({ message: 'Invalid OTP' });
+      return res.status(400).json({ message: 'Invalid OTP!' });
     }
 
     user.verified = true;
@@ -53,7 +53,7 @@ export const verifyOTP = async (req, res) => {
 
     await user.save();
 
-    res.status(200).json({ message: 'User verified' });
+    res.status(200).json({ message: 'User verified!' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -65,15 +65,15 @@ export const resendOTP = async (req, res) => {
   try {
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({ message: "User not found" });
+      return res.status(400).json({ message: "User not found!" });
     }
 
     const newOtp = generateOTP();
     user.otp = newOtp;
     await user.save();
-    await sendOTPEmail(email, newOtp);
+    await sendOTPEmail(email, newOtp, "OTP Resend", "Here is your OTP to verify your email address");
 
-    res.status(200).json({ message: "OTP resent" });
+    res.status(200).json({ message: "OTP resent!" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -90,7 +90,7 @@ export const login = async (req, res) => {
       cachedUser = JSON.parse(cachedUser);
       const dbUser = await User.findOne({ email });
       if (!dbUser) {
-        return res.status(400).json({ message: 'User not exists' });
+        return res.status(400).json({ message: 'User not exists!' });
       }
 
       // Ensure both cache and database have the same verified status
@@ -111,14 +111,14 @@ export const login = async (req, res) => {
       if (user) {
         await client.set(email, JSON.stringify(user), { EX: 3600 }); // Cache the user
       } else {
-        return res.status(400).json({ message: 'User not exists' });
+        return res.status(400).json({ message: 'User not exists!' });
       }
     }
 
     // Proceed with password check and login
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+      return res.status(400).json({ message: 'Invalid credentials!' });
     }
 
     const token = generateToken({ userId: user._id }, '1d');
@@ -133,38 +133,74 @@ export const forgotPassword = async (req, res) => {
   try {
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json({ message: "User not found!" });
     }
 
-    const resetToken = generateToken({ id: user._id }, '1h');
-    const resetUrl = `${process.env.BASE_URL}/reset-password/${resetToken}`;
+    const otp = generateOTP();
+    user.otp = otp;
+    await user.save();
+    await sendOTPEmail(email, otp, "Password Reset OTP", "Here is your OTP to reset your password");
 
-    await sendResetEmail(user.email, resetUrl);
+    // Set a temporary flag in Redis to verify OTP before allowing password reset
+    await client.set(`otp_verified_${user._id}`, 'false', { EX: 300 }); // Expires in 5 minutes
 
-    res.status(200).json({ message: "Reset password link sent to your email address" });
+    res.status(200).json({ message: "OTP sent to your email address!" });
   } catch (error) {
-    res.status(500).json({ message: "Error sending password reset email", error: error.message });
+    res.status(500).json({ message: "Error sending OTP", error: error.message });
+  }
+};
+
+export const verifyForgotPasswordOTP = async (req, res) => {
+  const { email, otp } = req.body;
+
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found!" });
+    }
+
+    const isOtpVerified = await client.get(`otp_verified_${user._id}`);
+    if (!isOtpVerified) {
+      user.otp = null; // Clear the OTP as it's no longer valid
+      await user.save();
+      return res.status(400).json({ message: "OTP has expired. please try again." });
+    }
+
+    if (user.otp === otp) {
+      await client.set(`otp_verified_${user._id}`, 'true', { EX: 300 }); // OTP verified, allow password reset for 5 minutes
+      res.status(200).json({ message: "OTP verified!" });
+    } else {
+      res.status(400).json({ message: "Invalid OTP!" });
+    }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };
 
 export const resetPassword = async (req, res) => {
-  const { token } = req.params;
-  const { password } = req.body;
+  const { email, password, otp } = req.body;
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
-
+    const user = await User.findOne({ email });
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json({ message: "User not found!" });
+    }
+
+    // Check if OTP is verified
+    const isOtpVerified = await client.get(`otp_verified_${user._id}`);
+    if (!isOtpVerified || isOtpVerified === 'false') {
+      return res.status(400).json({ message: 'OTP verification failed or expired!' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
     user.password = hashedPassword;
+    user.otp = null;
     await user.save();
 
-    res.status(200).json({ message: "Password reset successfully" });
+    await client.del(`otp_verified_${user._id}`);
+
+    res.status(200).json({ message: "Password reset successfully!" });
   } catch (error) {
-    res.status(500).json({ message: "Invalid or expired token" });
+    res.status(500).json({ message: "Invalid or expired token!" });
   }
 };
