@@ -83,36 +83,28 @@ export const login = async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    let cachedUser = await client.get(email); // Use Redis to get the cached user
-    let user;
+    let user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ message: 'User not exists!' });
+    }
 
+    let cachedUser = await client.get(email); // Use Redis to get the cached user
     if (cachedUser) {
       cachedUser = JSON.parse(cachedUser);
-      const dbUser = await User.findOne({ email });
-      if (!dbUser) {
-        return res.status(400).json({ message: 'User not exists!' });
-      }
-
-      // Ensure both cache and database have the same verified status
-      if (cachedUser.verified && dbUser.verified) {
-        user = dbUser; // Use the verified user from the database
-      } else {
-        // Handle discrepancy or unverified status
-        const otp = generateOTP();
-        dbUser.otp = otp;
-        await dbUser.save();
-        await sendOTPEmail(email, otp);
-        await client.set(email, JSON.stringify(dbUser), { EX: 3600 }); // Update cache with new OTP
-        const token = generateToken({ userId: dbUser._id }, '1h');
-        return res.status(400).json({ message: 'User not verified. OTP resent.', token });
-      }
     } else {
-      user = await User.findOne({ email });
-      if (user) {
-        await client.set(email, JSON.stringify(user), { EX: 3600 }); // Cache the user
-      } else {
-        return res.status(400).json({ message: 'User not exists!' });
-      }
+      // If no cache exists, set the current user data in cache
+      await client.set(email, JSON.stringify(user), { EX: 3600 });
+    }
+
+    // Check if user is verified in both cache and database
+    if (!user.verified || (cachedUser && !cachedUser.verified)) {
+      const otp = generateOTP();
+      user.otp = otp;
+      await user.save();
+      await sendOTPEmail(email, otp);
+      await client.set(email, JSON.stringify(user), { EX: 3600 });
+      const token = generateToken({ userId: user._id }, '1h');
+      return res.status(400).json({ message: 'User not verified. OTP resent.', token });
     }
 
     // Proceed with password check and login

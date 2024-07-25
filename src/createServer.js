@@ -5,11 +5,11 @@ import { json, urlencoded } from 'express';
 import authRoutes from './routes/authRoutes.js';
 import errorHandler from './middleware/errorHandler.js';
 import cors from 'cors';
+import client from './utils/redisClient.js';
 
 export async function createServer() {
   console.log(' ')
   console.log(chalk.blue('--- Starting Express Server ---'));
-  console.log(' ')
   console.log(' ')
 
   // Initialize the app
@@ -22,13 +22,33 @@ export async function createServer() {
     allowedHeaders: ['Content-Type', 'Authorization']
   }));
 
+  // Start the server
+  console.log(chalk.yellow('Express Status:'), chalk.bold.green('Running'));
+
   // Database Connection
   try {
     await mongoose.connect(process.env.MONGODB_URI);
-    console.log(chalk.yellow('Database:'),chalk.bold.green('connected successfully 🥳'));
+    console.log(chalk.yellow('Database Status:'), chalk.bold.green('connected'));
   } catch (error) {
-    console.log(chalk.yellow('Database:'),chalk.bold.red('Connection Failed:', error));
+    console.log(chalk.yellow('Database Status:'), chalk.bold.red('Connection Failed:', error));
   }
+
+
+  // Check Redis connection
+  client.on('connect', () => {
+    console.log(chalk.yellow('Redis Status:'), chalk.bold.green('Connected'));
+    console.log(chalk.yellow('Redis listening on:'), chalk.bold.green('http://localhost:8001'));
+  });
+
+  client.on('error', (err) => {
+    console.log(chalk.yellow('Redis Status:'), chalk.bold.red('Disconnected'));
+    console.log(chalk.yellow('Redis Error:'), chalk.bold.red(`Disconnected - ${err}`));
+  });
+
+  // Immediately check Redis connection status
+  console.log(chalk.yellow('Redis Status:'), client.isOpen ? chalk.bold.green('Connected') : chalk.bold.red('Disconnected'));
+  console.log(' ')
+  console.log(chalk.yellow('Redis listening on:'), client.isOpen ? chalk.bold.green('http://localhost:8001') : chalk.bold.red('Disconnected'));
 
   app.use(json());
   app.use(urlencoded({ extended: true }));
@@ -44,9 +64,6 @@ export async function createServer() {
   // Error handling middleware
   app.use(errorHandler);
 
-  // Start the server
-  console.log(chalk.yellow('Express Status:'), chalk.bold.green('Running'));
-  console.log(' ')
   console.log(chalk.yellow('App listening on:'), chalk.bold.green(`http://localhost:${process.env.PORT || 5000}`));
 
   return app;
