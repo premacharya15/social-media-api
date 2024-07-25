@@ -83,26 +83,24 @@ export const login = async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    let user = await User.findOne({ email });
+
+    const cachedUser = await client.get(email);
+    let user = cachedUser ? JSON.parse(cachedUser) : null;
+
+    // If not in Redis, retrieve from database and check if user exists
     if (!user) {
-      return res.status(400).json({ message: 'User not exists!' });
+      user = await User.findOne({ email });
+      if (!user) {
+        return res.status(400).json({ message: 'User does not exist!' });
+      }
     }
 
-    let cachedUser = await client.get(email); // Use Redis to get the cached user
-    if (cachedUser) {
-      cachedUser = JSON.parse(cachedUser);
-    } else {
-      // If no cache exists, set the current user data in cache
-      await client.set(email, JSON.stringify(user), { EX: 3600 });
-    }
-
-    // Check if user is verified in both cache and database
-    if (!user.verified || (cachedUser && !cachedUser.verified)) {
+    // Check if user is verified
+    if (!user.verified) {
       const otp = generateOTP();
       user.otp = otp;
       await user.save();
       await sendOTPEmail(email, otp);
-      await client.set(email, JSON.stringify(user), { EX: 3600 });
       const token = generateToken({ userId: user._id }, '1h');
       return res.status(400).json({ message: 'User not verified. OTP resent.', token });
     }
@@ -114,6 +112,12 @@ export const login = async (req, res) => {
     }
 
     const token = generateToken({ userId: user._id }, '1d');
+
+    // Store user data in Redis cache if it was not already cached
+    if (!cachedUser) {
+      await client.set(email, JSON.stringify(user), { EX: 432000 }); // Expires in 5 days
+    }
+
     res.status(200).json({ token, user });
   } catch (error) {
     res.status(500).json({ message: error.message });
