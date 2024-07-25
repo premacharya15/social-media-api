@@ -10,6 +10,6 @@ router.post('/verify', protect, verifyOTP);
 router.post('/resend-otp', resendOTP);
 router.post('/forgot-password', forgotPassword);
 router.post('/verify-forgot-password-otp', verifyForgotPasswordOTP);
-router.post('/reset-password/', resetPassword);
+router.post('/reset-password', resetPassword);
 
 export default router;
