@@ -51,9 +51,27 @@ export const verifyOTP = async (req, res) => {
     user.verified = true;
     user.otp = null;
 
-    await user.save();
+    // Generate a base username
+    const nameParts = user.name.trim().toLowerCase().split(/\s+/);
+    let baseUsername = nameParts.join('_');
+    let username = baseUsername;
 
-    res.status(200).json({ message: 'User verified!' });
+    // Function to generate a random number
+    const getRandomNumber = () => Math.floor(Math.random() * 1000);
+
+    // Function to generate a random character
+    const getRandomChar = () => Math.random() < 0.5 ? '_' : '.';
+
+    // Check if the username already exists, if so, modify it
+    while (await User.findOne({ username })) {
+      username = `${baseUsername}${getRandomChar()}${getRandomNumber()}`;
+    }
+
+    // Update the user with the new unique username
+    user.username = username;
+    await user.save();
+    
+    res.status(200).json({ message: 'User verified!'});
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
