@@ -4,7 +4,7 @@ import { updateUsername, getUsernameSuggestions } from '../controllers/userContr
 
 const router = express.Router();
 
-router.put('/username', protect, updateUsername);
+router.put('/update-username', protect, updateUsername);
 router.get('/username-suggestions', protect, getUsernameSuggestions);
 
 export default router;
