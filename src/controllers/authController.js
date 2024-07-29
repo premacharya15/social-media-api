@@ -71,8 +71,10 @@ export const verifyOTP = catchAsync (async (req, res) => {
     // Update the user with the new unique username
     user.username = username;
     await user.save();
+
+    const token = generateToken({ userId: user._id }, '1h');
     
-    res.status(200).json({ message: 'User verified!'});
+    res.status(200).json({ message: 'User verified!', username , token});
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
