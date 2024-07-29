@@ -1,7 +1,8 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/userModel.js'
+import catchAsync from './catchAsync.js';
 
-export const protect = async (req, res, next) => {
+export const protect = catchAsync (async (req, res, next) => {
   const authHeader = req.header('Authorization');
   if (!authHeader) {
     return res.status(401).json({ message: 'Authorization header is missing' });
@@ -20,4 +21,4 @@ export const protect = async (req, res, next) => {
   } else {
     return res.status(401).json({ message: 'Token format is incorrect' });
   }
-};
+});
