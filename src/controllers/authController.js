@@ -3,8 +3,9 @@ import bcrypt from 'bcryptjs';
 import { generateOTP, sendOTPEmail } from '../services/mailService.js';
 import { generateToken } from '../utils/generateToken.js';
 import client from '../utils/redisClient.js';
+import catchAsync from '../middleware/catchAsync.js';
 
-export const signUp = async (req, res) => {
+export const signUp = catchAsync (async (req, res) => {
   const { name, email, phoneNumber, dateOfBirth, password } = req.body;
 
   try {
@@ -36,9 +37,9 @@ export const signUp = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
-};
+});
 
-export const verifyOTP = async (req, res) => {
+export const verifyOTP = catchAsync (async (req, res) => {
   const { email, otp } = req.body;
 
   try {
@@ -75,9 +76,9 @@ export const verifyOTP = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
-};
+});
 
-export const resendOTP = async (req, res) => {
+export const resendOTP = catchAsync (async (req, res) => {
   const { email } = req.body;
 
   try {
@@ -95,9 +96,9 @@ export const resendOTP = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
-};
+});
 
-export const login = async (req, res) => {
+export const login = catchAsync (async (req, res) => {
   const { email, password } = req.body;
 
   try {
@@ -140,9 +141,9 @@ export const login = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
-};
+});
 
-export const forgotPassword = async (req, res) => {
+export const forgotPassword = catchAsync (async (req, res) => {
   const { email } = req.body;
   try {
     const user = await User.findOne({ email });
@@ -162,9 +163,9 @@ export const forgotPassword = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: "Error sending OTP", error: error.message });
   }
-};
+});
 
-export const verifyForgotPasswordOTP = async (req, res) => {
+export const verifyForgotPasswordOTP = catchAsync (async (req, res) => {
   const { email, otp } = req.body;
 
   try {
@@ -189,9 +190,9 @@ export const verifyForgotPasswordOTP = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
-};
+});
 
-export const resetPassword = async (req, res) => {
+export const resetPassword = catchAsync (async (req, res) => {
   const { email, password, otp } = req.body;
 
   try {
@@ -217,4 +218,4 @@ export const resetPassword = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: "Invalid or expired token!" });
   }
-};
+});
