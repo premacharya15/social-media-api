@@ -4,6 +4,7 @@ import { generateOTP, sendOTPEmail } from '../services/mailService.js';
 import { generateToken } from '../utils/generateToken.js';
 import client from '../utils/redisClient.js';
 import catchAsync from '../middleware/catchAsync.js';
+import { generateUniqueUsername } from '../utils/generateUniqueUsername.js';
 
 export const signUp = catchAsync (async (req, res) => {
   const { name, email, phoneNumber, dateOfBirth, password } = req.body;
@@ -16,8 +17,13 @@ export const signUp = catchAsync (async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Generate a unique username based on the name
+    const baseUsername = name.trim().toLowerCase().replace(/\s+/g, '_');
+    const uniqueUsername = await generateUniqueUsername(baseUsername); // Ensure this function handles null or empty baseUsername gracefully
+
     const user = await User.create({
       name,
+      username: uniqueUsername,
       email,
       phoneNumber,
       dateOfBirth,
@@ -32,7 +38,8 @@ export const signUp = catchAsync (async (req, res) => {
     await sendOTPEmail(email, otp);
 
     const token = generateToken({ userId: user._id }, '1h');
-
+    console.log(`otp: ${otp}`);
+    console.log(' ');
     res.status(201).json({ message: 'User created, OTP sent!', token });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -51,30 +58,11 @@ export const verifyOTP = catchAsync (async (req, res) => {
 
     user.verified = true;
     user.otp = null;
-
-    // Generate a base username
-    const nameParts = user.name.trim().toLowerCase().split(/\s+/);
-    let baseUsername = nameParts.join('_');
-    let username = baseUsername;
-
-    // Function to generate a random number
-    const getRandomNumber = () => Math.floor(Math.random() * 1000);
-
-    // Function to generate a random character
-    const getRandomChar = () => Math.random() < 0.5 ? '_' : '.';
-
-    // Check if the username already exists, if so, modify it
-    while (await User.findOne({ username })) {
-      username = `${baseUsername}${getRandomChar()}${getRandomNumber()}`;
-    }
-
-    // Update the user with the new unique username
-    user.username = username;
     await user.save();
 
     const token = generateToken({ userId: user._id }, '1h');
     
-    res.status(200).json({ message: 'User verified!', username , token});
+    res.status(200).json({ message: 'User verified!', username: user.username, token});
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

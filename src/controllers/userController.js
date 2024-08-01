@@ -1,5 +1,4 @@
 import User from '../models/userModel.js';
-import { generateToken } from '../utils/generateToken.js';
 import catchAsync from '../middleware/catchAsync.js';
 
 export const updateUsername = catchAsync(async (req, res) => {
@@ -10,24 +9,30 @@ export const updateUsername = catchAsync(async (req, res) => {
         return res.status(404).json({ message: 'User not found' });
     }
 
-    // Check if the new username is already taken
+    if (username === user.username) {
+        return res.status(200).json({ message: 'No change in username.' });
+    }
+
     const existingUser = await User.findOne({ username });
     if (existingUser) {
-        return res.status(400).json({ message: 'Username is already taken' });
+
+        // console.log(`Requested username '${username}' is already taken. Generating suggestions...`);
+        return getUsernameSuggestions(req, res, username); // Pass the attempted username for clarity
     }
 
+    // Update username and clear Redis entry
     user.username = username;
     await user.save();
-    res.status(200).json({ message: 'Username updated successfully' });
+    res.status(200).json({ message: 'Username updated successfully!' });
 });
 
-export const getUsernameSuggestions = catchAsync(async (req, res) => {
+export const getUsernameSuggestions = catchAsync(async (req, res, attemptedUsername) => {
     const user = await User.findById(req.user._id);
     if (!user) {
-        return res.status(404).json({ message: 'User not found' });
+        return res.status(404).json({ message: 'User not found!' });
     }
 
-    const baseUsername = user.name.toLowerCase().replace(/\s+/g, '_');
+    const baseUsername = (typeof attemptedUsername === 'string' ? attemptedUsername : user.username).toLowerCase().replace(/\s+/g, '_');
     const suggestions = [];
     let attempts = 0;
 
@@ -43,6 +48,6 @@ export const getUsernameSuggestions = catchAsync(async (req, res) => {
     if (suggestions.length < 3) {
         return res.status(500).json({ message: 'Unable to generate unique username suggestions at this time.' });
     }
-
-    res.status(200).json({ suggestions });
+    // console.log(`Username already taken, Suggestions: ${suggestions}`);
+    res.status(409).json({ message: 'Username already taken!', suggestions });
 });

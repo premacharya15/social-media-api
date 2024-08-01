@@ -7,6 +7,7 @@ import userRoutes from './routes/userRoutes.js';
 import errorHandler from './middleware/errorHandler.js';
 import cors from 'cors';
 import client from './utils/redisClient.js';
+import os from 'os';
 
 export async function createServer() {
   console.log(' ')
@@ -65,8 +66,23 @@ export async function createServer() {
 
   // Error handling middleware
   app.use(errorHandler);
-
   console.log(chalk.yellow('App listening on:'), chalk.bold.green(`http://localhost:${process.env.PORT || 5000}`));
+
+  function getIPv4Address() {
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+        if (name.includes('Wi-Fi') || name.includes('Wireless')) {
+            for (const iface of interfaces[name]) {
+                if (iface.family === 'IPv4' && !iface.internal) {
+                    return iface.address;
+                }
+            }
+        }
+    }
+    return 'localhost';
+  }
+
+  console.log(chalk.yellow('App listening on:'), chalk.bold.green(`http://${getIPv4Address()}:${process.env.PORT || 5000}`));
 
   return app;
 }
