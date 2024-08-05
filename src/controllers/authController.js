@@ -120,7 +120,7 @@ export const login = catchAsync (async (req, res) => {
       return res.status(400).json({ message: 'Invalid credentials!' });
     }
 
-    const token = generateToken({ userId: user._id }, '1d');
+    const token = generateToken({ userId: user._id }, '1m');
 
     // Store user data in Redis cache if it was not already cached
     if (!cachedUser) {
@@ -208,4 +208,20 @@ export const resetPassword = catchAsync (async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: "Invalid or expired token!" });
   }
+});
+
+export const verifyToken = catchAsync(async (req, res) => {
+  // If the middleware passes, the token is still valid
+  const user = req.user; // User is attached to the request in the middleware
+  if (!user) {
+    return res.status(404).json({ message: 'User not found' });
+  }
+
+  // Generate a new token for continued session
+  const newToken = generateToken({ userId: user._id }, '1d');
+
+  res.status(200).json({
+    message: 'Token is valid!',
+    token: newToken
+  });
 });
