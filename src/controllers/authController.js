@@ -120,7 +120,7 @@ export const login = catchAsync (async (req, res) => {
       return res.status(400).json({ message: 'Invalid credentials!' });
     }
 
-    const token = generateToken({ userId: user._id }, '1m');
+    const token = generateToken({ userId: user._id }, '2h'); // Expires in 1 hours
 
     // Store user data in Redis cache if it was not already cached
     if (!cachedUser) {
