@@ -10,7 +10,8 @@ import client from './utils/redisClient.js';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { protect } from './middleware/authMiddleware.js'
+import { protect } from './middleware/authMiddleware.js';
+import limiter from './utils/rateLimit.js';
 
 // Manually define __dirname in ESM
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -23,6 +24,9 @@ export async function createServer() {
   // Initialize the app
   const app = express();
 
+  // Apply rate limiting middleware globally
+  app.use(limiter);
+
   // Configure CORS
   app.use(cors({
     origin: '*', // This allows all domains. For production, specify allowed domains.
@@ -30,10 +34,11 @@ export async function createServer() {
     allowedHeaders: ['Content-Type', 'Authorization']
   }));
 
-  
+
   // Serve static files from the upload directory
   const uploadDirectory = path.join(__dirname, 'uploads');
   app.use('/uploads', protect, express.static(uploadDirectory));
+
 
   // Start the server
   console.log(chalk.yellow('Express Status:'), chalk.bold.green('Running'));
@@ -45,7 +50,6 @@ export async function createServer() {
   } catch (error) {
     console.log(chalk.yellow('Database Status:'), chalk.bold.red('Connection Failed:', error));
   }
-
 
   // Check Redis connection
   client.on('connect', () => {
@@ -66,6 +70,7 @@ export async function createServer() {
   app.use(json());
   app.use(urlencoded({ extended: true }));
 
+
   // Routes with versioning
   app.use('/api/v1/auth', authRoutes);
   app.use('/api/v1/user', userRoutes);
@@ -74,6 +79,7 @@ export async function createServer() {
   app.get('/', (req, res) => {
     res.status(200).send('Social Media API');
   });
+
 
   // Error handling middleware
   app.use(errorHandler);
