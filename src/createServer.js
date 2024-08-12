@@ -8,6 +8,12 @@ import errorHandler from './middleware/errorHandler.js';
 import cors from 'cors';
 import client from './utils/redisClient.js';
 import os from 'os';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { protect } from './middleware/authMiddleware.js'
+
+// Manually define __dirname in ESM
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export async function createServer() {
   console.log(' ')
@@ -23,6 +29,11 @@ export async function createServer() {
     methods: ['GET', 'POST', 'PUT', 'DELETE'], // Specify HTTP methods allowed.
     allowedHeaders: ['Content-Type', 'Authorization']
   }));
+
+  
+  // Serve static files from the upload directory
+  const uploadDirectory = path.join(__dirname, 'uploads');
+  app.use('/uploads', protect, express.static(uploadDirectory));
 
   // Start the server
   console.log(chalk.yellow('Express Status:'), chalk.bold.green('Running'));

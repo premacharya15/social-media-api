@@ -6,6 +6,8 @@ import client from '../utils/redisClient.js';
 import catchAsync from '../middleware/catchAsync.js';
 import { generateUniqueUsername } from '../utils/generateUniqueUsername.js';
 
+
+// SignUp 
 export const signUp = catchAsync (async (req, res) => {
   const { name, email, phoneNumber, dateOfBirth, password } = req.body;
 
@@ -46,6 +48,8 @@ export const signUp = catchAsync (async (req, res) => {
   }
 });
 
+
+// Verify OTP 
 export const verifyOTP = catchAsync (async (req, res) => {
   const { email, otp } = req.body;
 
@@ -68,6 +72,8 @@ export const verifyOTP = catchAsync (async (req, res) => {
   }
 });
 
+
+// Resend OTP
 export const resendOTP = catchAsync (async (req, res) => {
   const { email } = req.body;
 
@@ -88,6 +94,8 @@ export const resendOTP = catchAsync (async (req, res) => {
   }
 });
 
+
+// Login 
 export const login = catchAsync (async (req, res) => {
   const { email, password } = req.body;
 
@@ -110,7 +118,7 @@ export const login = catchAsync (async (req, res) => {
       user.otp = otp;
       await user.save();
       await sendOTPEmail(email, otp);
-      const token = generateToken({ userId: user._id }, '1h');
+      const token = generateToken({ userId: user._id }, '2h');
       return res.status(400).json({ message: 'User not verified. OTP resent.', token });
     }
 
@@ -120,7 +128,7 @@ export const login = catchAsync (async (req, res) => {
       return res.status(400).json({ message: 'Invalid credentials!' });
     }
 
-    const token = generateToken({ userId: user._id }, '2h'); // Expires in 1 hours
+    const token = generateToken({ userId: user._id }, '2h'); // Expires in 2 hours
 
     // Store user data in Redis cache if it was not already cached
     if (!cachedUser) {
@@ -133,6 +141,8 @@ export const login = catchAsync (async (req, res) => {
   }
 });
 
+
+// Forgot Password
 export const forgotPassword = catchAsync (async (req, res) => {
   const { email } = req.body;
   try {
@@ -155,6 +165,8 @@ export const forgotPassword = catchAsync (async (req, res) => {
   }
 });
 
+
+// Verify Forgot Password OTP
 export const verifyForgotPasswordOTP = catchAsync (async (req, res) => {
   const { email, otp } = req.body;
 
@@ -182,6 +194,8 @@ export const verifyForgotPasswordOTP = catchAsync (async (req, res) => {
   }
 });
 
+
+// Reset Password
 export const resetPassword = catchAsync (async (req, res) => {
   const { email, password, otp } = req.body;
 
@@ -210,6 +224,8 @@ export const resetPassword = catchAsync (async (req, res) => {
   }
 });
 
+
+// Verify Token
 export const verifyToken = catchAsync(async (req, res) => {
   // If the middleware passes, the token is still valid
   const user = req.user; // User is attached to the request in the middleware
