@@ -62,10 +62,25 @@ export const login = async (req, res) => {
     const user = await User.findOne({ email });
 
     if (!user) {
+<<<<<<< Updated upstream
       return res.status(400).json({ message: 'Invalid credentials' });
+=======
+      user = await User.findOne({ email });
+      if (!user) {
+        return res.status(404).json({ message: 'User does not exist!' });
+      }
+>>>>>>> Stashed changes
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
+<<<<<<< Updated upstream
+=======
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Invalid credentials!' });
+    }
+
+    const token = generateToken({ userId: user._id }, '2h'); // Expires in 2 hours
+>>>>>>> Stashed changes
 
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid credentials' });
