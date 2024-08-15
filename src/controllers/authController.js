@@ -108,7 +108,7 @@ export const login = catchAsync (async (req, res) => {
     if (!user) {
       user = await User.findOne({ email });
       if (!user) {
-        return res.status(400).json({ message: 'User does not exist!' });
+        return res.status(404).json({ message: 'User does not exist!' });
       }
     }
 
@@ -125,7 +125,7 @@ export const login = catchAsync (async (req, res) => {
     // Proceed with password check and login
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid credentials!' });
+      return res.status(401).json({ message: 'Invalid credentials!' });
     }
 
     const token = generateToken({ userId: user._id }, '2h'); // Expires in 2 hours
