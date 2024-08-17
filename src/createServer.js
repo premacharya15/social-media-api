@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import { json, urlencoded } from 'express';
 import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
+import postRoutes from './routes/postRoutes.js';
 import errorHandler from './middleware/errorHandler.js';
 import cors from 'cors';
 import client from './utils/redisClient.js';
@@ -74,6 +75,7 @@ export async function createServer() {
   // Routes with versioning
   app.use('/api/v1/auth', authRoutes);
   app.use('/api/v1/user', userRoutes);
+  app.use('/api/v1/post', postRoutes);
 
   // Basic route
   app.get('/', (req, res) => {
