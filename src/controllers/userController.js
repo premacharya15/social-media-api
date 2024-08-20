@@ -5,7 +5,7 @@ import multer from 'multer';
 import User from '../models/userModel.js';
 import catchAsync from '../middleware/catchAsync.js';
 import client from '../utils/redisClient.js';
-
+import Post from '../models/postModel.js';
 
 // Convert URL to path for __dirname equivalent in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -38,21 +38,38 @@ const upload = multer({ storage: storage });
 
 // Get User Details --Logged In User
 export const getAccountDetails = catchAsync(async (req, res) => {
+    const userId = req.user._id;
+
     // Attempt to retrieve user data from Redis cache
-    const cachedUser = await client.get(`user_${req.user._id}`);
+    const cachedUser = await client.get(`user_${userId}`);
     let user = cachedUser ? JSON.parse(cachedUser) : null;
 
-    // If user data is not in Redis, retrieve from database
+    // Fetch user posts
+    const userPosts = await Post.find({ postedBy: userId });
+
+    // If user data is not in Redis, retrieve from database and update cache
     if (!user) {
-        user = await User.findById(req.user._id);
+        user = await User.findById(userId);
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
-        // Cache the user data in Redis for future requests
-        await client.set(`user_${user._id}`, JSON.stringify(user), { EX: 3600 }); // Cache for 1 hour
+        // Prepare data to cache
+        const userDataToCache = {
+            ...user.toObject(),
+            posts: userPosts
+        };
+        // Cache the user data along with posts in Redis for future requests
+        await client.set(`user_${userId}`, JSON.stringify(userDataToCache), { EX: 3600 });
+    } else {
+        // Update the cache with the latest posts
+        user.posts = userPosts;
+        await client.set(`user_${userId}`, JSON.stringify(user), { EX: 3600 });
     }
 
-    res.status(200).json(user);
+    res.status(200).json({
+        user,
+        posts: userPosts
+    });
 });
 
 
@@ -163,6 +180,17 @@ export const updateProfile = catchAsync(async (req, res) => {
   await user.save();
 //   console.log('Updated user data:', user);
   res.status(200).json({ message: 'Profile updated successfully!', user });
+});
+
+
+// Logout User
+export const logoutUser = catchAsync(async (req, res) => {
+    const userId = req.user._id;
+
+    // Delete the user's session data from Redis
+    await client.del(`user_${userId}`);
+
+    res.status(200).json({ message: 'Logged out successfully!' });
 });
 
 export { upload };
