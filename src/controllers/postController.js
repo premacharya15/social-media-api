@@ -4,6 +4,7 @@ import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import client from '../utils/redisClient.js'; // Ensure Redis client is imported
 
 // Convert URL to path for __dirname equivalent in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -61,8 +62,31 @@ export const getAllPosts = catchAsync(async (req, res) => {
 
 // Get All Posts by users
 export const getUserPosts = catchAsync(async (req, res) => {
-  const userId = req.user._id; // User ID from the token
-  const userPosts = await Post.find({ postedBy: userId });
+  const userId = req.user._id;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 2;
+  const skip = (page - 1) * limit;
+
+  // Redis key to store cached data
+  const redisKey = `user_posts_${userId}_page_${page}`;
+
+  // Try to fetch data from Redis first
+  const cachedPosts = await client.get(redisKey);
+
+  if (cachedPosts) {
+    // If data is found in Redis, return it
+    return res.status(200).json(JSON.parse(cachedPosts));
+  }
+
+  // If not in Redis, fetch from database
+  const userPosts = await Post.find({ postedBy: userId })
+                              .skip(skip)
+                              .limit(limit)
+                              .populate('postedBy', 'name');
+
+  // Cache the result in Redis
+  await client.set(redisKey, JSON.stringify(userPosts), { EX: 3600 }); // Cache for 1 hour
+
   res.status(200).json(userPosts);
 });
 

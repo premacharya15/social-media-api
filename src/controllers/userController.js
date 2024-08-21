@@ -43,9 +43,7 @@ export const getAccountDetails = catchAsync(async (req, res) => {
     // Attempt to retrieve user data from Redis cache
     const cachedUser = await client.get(`user_${userId}`);
     let user = cachedUser ? JSON.parse(cachedUser) : null;
-
-    // Fetch user posts
-    const userPosts = await Post.find({ postedBy: userId });
+    let postCount;
 
     // If user data is not in Redis, retrieve from database and update cache
     if (!user) {
@@ -53,22 +51,22 @@ export const getAccountDetails = catchAsync(async (req, res) => {
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
-        // Prepare data to cache
-        const userDataToCache = {
-            ...user.toObject(),
-            posts: userPosts
-        };
-        // Cache the user data along with posts in Redis for future requests
-        await client.set(`user_${userId}`, JSON.stringify(userDataToCache), { EX: 3600 });
+
+        // Get post count
+        postCount = await Post.countDocuments({ postedBy: userId });
+
+        // Cache the user data along with post count in Redis for future requests
+        const userData = { ...user.toObject(), postCount };
+        await client.set(`user_${userId}`, JSON.stringify(userData), { EX: 3600 });
     } else {
-        // Update the cache with the latest posts
-        user.posts = userPosts;
-        await client.set(`user_${userId}`, JSON.stringify(user), { EX: 3600 });
+        postCount = user.postCount;
     }
 
     res.status(200).json({
-        user,
-        posts: userPosts
+        user: {
+            ...user,
+            postCount
+        }
     });
 });
 
@@ -182,6 +180,8 @@ export const updateProfile = catchAsync(async (req, res) => {
   res.status(200).json({ message: 'Profile updated successfully!', user });
 });
 
+export { upload };
+
 
 // Logout User
 export const logoutUser = catchAsync(async (req, res) => {
@@ -193,4 +193,28 @@ export const logoutUser = catchAsync(async (req, res) => {
     res.status(200).json({ message: 'Logged out successfully!' });
 });
 
-export { upload };
+
+// Discover People
+export const discoverPeople = catchAsync(async (req, res) => {
+    const userId = req.user._id;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 2;
+    const skip = (page - 1) * limit;
+
+    // Fetch a list of user IDs that the current user is following
+    const user = await User.findById(userId).populate('following', '_id');
+    const followingIds = user.following.map(user => user._id);
+
+    // Find users that the current user is not following
+    const potentialPeople = await User.find({
+        _id: { $nin: [userId, ...followingIds] } // Exclude self and already followed users
+    })
+    .select('_id name avatar') // Select only id, name, and avatar fields
+    .skip(skip)
+    .limit(limit);
+
+    res.status(200).json({
+        message: 'People you may know',
+        data: potentialPeople
+    });
+});
