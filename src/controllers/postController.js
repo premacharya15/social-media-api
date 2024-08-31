@@ -47,6 +47,19 @@ export const createPost = catchAsync(async (req, res) => {
     postedBy
   });
 
+  // Invalidate Redis cache for the user's posts
+  const redisKeyPattern = `user_posts_${postedBy}_*`;
+  const keys = await client.keys(redisKeyPattern); 
+  await Promise.all(keys.map(key => client.del(key)));
+
+  // Update post count in user's Redis entry
+  const cachedUser = await client.get(`user_${postedBy}`);
+  if (cachedUser) {
+    const userData = JSON.parse(cachedUser);
+    userData.postCount = (userData.postCount) + 1;
+    await client.set(`user_${postedBy}`, JSON.stringify(userData), { EX: 3600 });
+  }
+
   res.status(201).json({
     message: 'Post created successfully!'
   });
@@ -64,7 +77,7 @@ export const getAllPosts = catchAsync(async (req, res) => {
 export const getUserPosts = catchAsync(async (req, res) => {
   const userId = req.user._id;
   const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 2;
+  const limit = parseInt(req.query.limit) || 10;
   const skip = (page - 1) * limit;
 
   // Redis key to store cached data
