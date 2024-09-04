@@ -139,7 +139,8 @@ export const getUsernameSuggestions = catchAsync(async (req, res, attemptedUsern
 
 // Update Profile
 export const updateProfile = catchAsync(async (req, res) => {
-  const user = await User.findById(req.user._id);
+  const userId = req.user._id;
+  const user = await User.findById(userId);
   if (!user) {
     return res.status(404).json({ message: 'User not found' });
   }
@@ -163,21 +164,24 @@ export const updateProfile = catchAsync(async (req, res) => {
     user.avatar = relativePath;
   }
 
+  await user.save();
+
+  // Get post count
+  const postCount = await Post.countDocuments({ postedBy: userId });
+
   // Update the user data in Redis cache
   const userDataToCache = {
-    _id: user._id,
-    name: user.name,
-    username: user.username,
-    email: user.email,
-    bio: user.bio,
-    website: user.website,
-    avatar: user.avatar
+    ...user.toObject(),
+    postCount
   };
-  await client.set(`user_${user._id}`, JSON.stringify(userDataToCache), { EX: 3600 }); // Cache for 1 hour
+  await client.set(`user_${userId}`, JSON.stringify(userDataToCache), { EX: 3600 }); // Cache for 1 hour
 
-  await user.save();
-//   console.log('Updated user data:', user);
-  res.status(200).json({ message: 'Profile updated successfully!', user });
+  res.status(200).json({
+    message: 'Profile updated successfully!',
+    user: {
+      ...userDataToCache
+    }
+  });
 });
 
 export { upload };
