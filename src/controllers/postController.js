@@ -4,7 +4,7 @@ import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import client from '../utils/redisClient.js'; // Ensure Redis client is imported
+import client from '../utils/redisClient.js';
 
 // Convert URL to path for __dirname equivalent in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -58,6 +58,16 @@ export const createPost = catchAsync(async (req, res) => {
     const userData = JSON.parse(cachedUser);
     userData.postCount = (userData.postCount) + 1;
     await client.set(`user_${postedBy}`, JSON.stringify(userData), { EX: 3600 });
+
+    // Update user details cache as well
+    const username = userData.username;
+    const userDetailKey = `user_details_${username}`;
+    const cachedUserDetails = await client.get(userDetailKey);
+    if (cachedUserDetails) {
+      const userDetails = JSON.parse(cachedUserDetails);
+      userDetails.postCount = userData.postCount;
+      await client.set(userDetailKey, JSON.stringify(userDetails), { EX: 3600 });
+    }
   }
 
   res.status(201).json({

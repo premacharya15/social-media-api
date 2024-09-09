@@ -6,6 +6,7 @@ import User from '../models/userModel.js';
 import catchAsync from '../middleware/catchAsync.js';
 import client from '../utils/redisClient.js';
 import Post from '../models/postModel.js';
+import { count } from 'console';
 
 // Convert URL to path for __dirname equivalent in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -47,7 +48,8 @@ export const getAccountDetails = catchAsync(async (req, res) => {
 
     // If user data is not in Redis, retrieve from database and update cache
     if (!user) {
-        user = await User.findById(userId);
+        // Retrieve user from database without sensitive and unnecessary fields
+        user = await User.findById(userId).select('-password -otp -posts -saved -followers -following -__v');
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
@@ -62,12 +64,22 @@ export const getAccountDetails = catchAsync(async (req, res) => {
         postCount = user.postCount;
     }
 
-    res.status(200).json({
-        user: {
-            ...user,
-            postCount
-        }
-    });
+    // Prepare a clean user object for response
+    const userData = {
+        _id: user._id,
+        username: user.username,
+        name: user.name,
+        email: user.email,
+        dateOfBirth: user.dateOfBirth,
+        verified: user.verified,
+        bio: user.bio,
+        website: user.website,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+        postCount
+    };
+
+    res.status(200).json({ user: userData });
 });
 
 
@@ -221,4 +233,31 @@ export const discoverPeople = catchAsync(async (req, res) => {
         message: 'People you may know',
         data: potentialPeople
     });
+});
+
+
+// get userdetils with username
+export const getUserDetails = catchAsync(async (req, res) => {
+    const { username } = req.params;
+    const redisKey = `user_details_${username}`;
+
+    // Try to get data from Redis first
+    const cachedData = await client.get(redisKey);
+    if (cachedData) {
+        return res.status(200).json({ user: JSON.parse(cachedData) });
+    }
+
+    // Fetch from database if not in cache
+    const user = await User.findOne({ username }).select('-password -otp -posts -saved -followers -following -email -dateOfBirth -verified -createdAt -updatedAt -__v');
+    if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Get post count
+    const postCount = await Post.countDocuments({ postedBy: user._id });
+
+    // Cache the user data in Redis and return response
+    const userData = { ...user.toObject(), postCount };
+    await client.set(redisKey, JSON.stringify(userData), { EX: 3600 }); // Cache for 1 hour
+    res.status(200).json({ userData });
 });
