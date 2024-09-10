@@ -261,3 +261,32 @@ export const getUserDetails = catchAsync(async (req, res) => {
     await client.set(redisKey, JSON.stringify(userData), { EX: 3600 }); // Cache for 1 hour
     res.status(200).json({ userData });
 });
+
+
+// Follow | Unfollow User
+export const followUser = catchAsync(async (req, res) => {
+    const userId = req.user._id;
+    const targetUserId = req.params.id;
+
+    if (userId === targetUserId) {
+        return res.status(400).json({ message: "You cannot follow yourself." });
+    }
+
+    const targetUser = await User.findById(targetUserId);
+    if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+    }
+
+    const isFollowing = req.user.following.includes(targetUserId);
+    if (isFollowing) {
+        // Unfollow user
+        await User.findByIdAndUpdate(userId, { $pull: { following: targetUserId } });
+        await User.findByIdAndUpdate(targetUserId, { $pull: { followers: userId } });
+        res.status(200).json({ message: "User unfollowed successfully" });
+    } else {
+        // Follow user
+        await User.findByIdAndUpdate(userId, { $addToSet: { following: targetUserId } });
+        await User.findByIdAndUpdate(targetUserId, { $addToSet: { followers: userId } });
+        res.status(200).json({ message: "User followed successfully" });
+    }
+});

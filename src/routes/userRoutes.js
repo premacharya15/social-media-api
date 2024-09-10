@@ -1,6 +1,6 @@
 import express from 'express';
 import { protect } from '../middleware/authMiddleware.js';
-import { updateUsername, getUsernameSuggestions, getAccountDetails, deleteProfile, updateProfile, upload, logoutUser, discoverPeople, getUserDetails } from '../controllers/userController.js';
+import { updateUsername, getUsernameSuggestions, getAccountDetails, deleteProfile, updateProfile, upload, logoutUser, discoverPeople, getUserDetails, followUser } from '../controllers/userController.js';
 
 const router = express.Router();
 
@@ -15,5 +15,7 @@ router.route('/me')
     .delete(protect, deleteProfile);
 
 router.get('/:username', protect, getUserDetails);
+
+router.put('/follow/:id', protect, followUser);
 
 export default router;
