@@ -63,7 +63,7 @@ export const createPost = catchAsync(async (req, res) => {
   const cachedUser = await client.get(`user_${postedBy}`);
   if (cachedUser) {
     const userData = JSON.parse(cachedUser);
-    userData.postCount = (userData.postCount) + 1;
+    userData.postCount = user.posts.length; // Use the length of the posts array
     await client.set(`user_${postedBy}`, JSON.stringify(userData), { EX: 3600 });
 
     // Update user details cache as well

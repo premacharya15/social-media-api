@@ -49,13 +49,13 @@ export const getAccountDetails = catchAsync(async (req, res) => {
     // If user data is not in Redis, retrieve from database and update cache
     if (!user) {
         // Retrieve user from database without sensitive and unnecessary fields
-        user = await User.findById(userId).select('-password -otp -posts -saved -followers -following -__v');
+        user = await User.findById(userId).select('-password -otp -posts -saved -followers -following -__v').populate('posts');
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
 
         // Get post count
-        postCount = await Post.countDocuments({ postedBy: userId });
+        postCount = user.posts.length; // Use the length of the posts array
 
         // Cache the user data along with post count in Redis for future requests
         const userData = { ...user.toObject(), postCount };
