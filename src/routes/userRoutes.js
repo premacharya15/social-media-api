@@ -16,6 +16,6 @@ router.route('/me')
 
 router.get('/:username', protect, getUserDetails);
 
-router.put('/follow/:id', protect, followUser);
+router.get('/follow/:id', protect, followUser);
 
 export default router;

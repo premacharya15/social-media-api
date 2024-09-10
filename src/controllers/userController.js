@@ -210,11 +210,11 @@ export const logoutUser = catchAsync(async (req, res) => {
 });
 
 
-// Discover People
+// Discover People | Mutual Followers 
 export const discoverPeople = catchAsync(async (req, res) => {
     const userId = req.user._id;
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 2;
+    const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
     // Fetch a list of user IDs that the current user is following
@@ -225,13 +225,38 @@ export const discoverPeople = catchAsync(async (req, res) => {
     const potentialPeople = await User.find({
         _id: { $nin: [userId, ...followingIds] } // Exclude self and already followed users
     })
-    .select('_id name avatar') // Select only id, name, and avatar fields
+    .select('_id name avatar followers')
     .skip(skip)
-    .limit(limit);
+    .limit(limit)
+    .lean(); // Use lean() for faster performance as we only read data
+
+    // Enhance potentialPeople with mutual followers information
+    const enhancedPeople = await Promise.all(potentialPeople.map(async person => {
+        // Find mutual followers
+        const mutualFollowers = await User.find({
+            _id: { $in: person.followers },
+            followers: userId
+        }).select('username');
+
+        // Map usernames of mutual followers
+        const mutuals = mutualFollowers.map(follower => follower.username);
+        let mutualFollowersText = 'No mutual followers';
+        if (mutuals.length > 0) {
+            mutualFollowersText = `Followed by ${mutuals[0]}`;
+            if (mutuals.length > 1) {
+                mutualFollowersText += ` +${mutuals.length - 1} more`;
+            }
+        }
+
+        return {
+            ...person,
+            mutualFollowers: mutualFollowersText
+        };
+    }));
 
     res.status(200).json({
         message: 'People you may know',
-        data: potentialPeople
+        data: enhancedPeople
     });
 });
 
