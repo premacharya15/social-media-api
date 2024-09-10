@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import client from '../utils/redisClient.js';
+import User from '../models/userModel.js';
 
 // Convert URL to path for __dirname equivalent in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -41,15 +42,21 @@ export const createPost = catchAsync(async (req, res) => {
   // Convert full path to a relative path with backslashes
   const relativePath = path.relative(path.join(__dirname, '..'), fullPath).replace(/\//g, '\\');
 
+  // Create new post
   const newPost = await Post.create({
     caption,
     image: relativePath,
     postedBy
   });
 
+  // Add post ID to user's posts array
+  const user = await User.findById(postedBy);
+  user.posts.push(newPost._id);
+  await user.save();
+
   // Invalidate Redis cache for the user's posts
   const redisKeyPattern = `user_posts_${postedBy}_*`;
-  const keys = await client.keys(redisKeyPattern); 
+  const keys = await client.keys(redisKeyPattern);
   await Promise.all(keys.map(key => client.del(key)));
 
   // Update post count in user's Redis entry
