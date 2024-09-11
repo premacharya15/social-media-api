@@ -1,6 +1,6 @@
 import express from 'express';
 import { protect } from '../middleware/authMiddleware.js';
-import { updateUsername, getUsernameSuggestions, getAccountDetails, deleteProfile, updateProfile, upload, logoutUser, discoverPeople, getUserDetails, followUser } from '../controllers/userController.js';
+import { updateUsername, getUsernameSuggestions, getAccountDetails, deleteProfile, updateProfile, upload, logoutUser, discoverPeople, getUserDetails, followUser, searchUsers } from '../controllers/userController.js';
 
 const router = express.Router();
 
@@ -13,6 +13,8 @@ router.route('/me')
     .get(protect, getAccountDetails)
     .put(protect, upload.single('avatar'), updateProfile)
     .delete(protect, deleteProfile);
+
+router.get('/search', protect, searchUsers);
 
 router.get('/:username', protect, getUserDetails);
 

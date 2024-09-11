@@ -6,7 +6,6 @@ import User from '../models/userModel.js';
 import catchAsync from '../middleware/catchAsync.js';
 import client from '../utils/redisClient.js';
 import Post from '../models/postModel.js';
-import { count } from 'console';
 
 // Convert URL to path for __dirname equivalent in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -307,11 +306,85 @@ export const followUser = catchAsync(async (req, res) => {
         // Unfollow user
         await User.findByIdAndUpdate(userId, { $pull: { following: targetUserId } });
         await User.findByIdAndUpdate(targetUserId, { $pull: { followers: userId } });
-        res.status(200).json({ message: "User unfollowed successfully" });
+        res.status(200).json({ message: "User unfollowed" });
     } else {
         // Follow user
         await User.findByIdAndUpdate(userId, { $addToSet: { following: targetUserId } });
         await User.findByIdAndUpdate(targetUserId, { $addToSet: { followers: userId } });
-        res.status(200).json({ message: "User followed successfully" });
+        res.status(200).json({ message: "User followed" });
     }
+});
+
+
+// User Search
+export const searchUsers = catchAsync(async (req, res, next) => {
+    const { keyword } = req.query;
+    const userId = req.user._id;
+    if (!keyword) {
+        return res.status(400).json({ message: "Keyword is required" });
+    }
+
+    const regexPattern = `^${keyword}`;
+    const cacheKey = `search_${keyword}_${userId}`;
+    const cachedResults = await client.get(cacheKey);
+
+    if (cachedResults) {
+        return res.status(200).json(JSON.parse(cachedResults));
+    }
+
+    // Fetch the list of user IDs the current user is following
+    const currentUser = await User.findById(userId).select('following');
+    const followingIds = currentUser.following.map(follow => follow.toString());
+
+    const users = await User.find({
+        $and: [
+            { _id: { $ne: userId } }, // Exclude the current user
+            { _id: { $nin: followingIds } }, // Exclude users already followed
+            {
+                $or: [
+                    { name: { $regex: regexPattern, $options: "i" } },
+                    { username: { $regex: regexPattern, $options: "i" } }
+                ]
+            }
+        ]
+    }).select('name username avatar followers').limit(10).lean();
+
+    if (users.length === 0) {
+        return res.status(404).json({ message: "No users found" });
+    }
+
+    // users with mutual followers information
+    const enhancedUsers = await Promise.all(users.map(async user => {
+        const mutualFollowers = await User.find({
+            _id: { $in: user.followers },
+            followers: userId
+        }).select('username').lean();
+
+        const mutuals = mutualFollowers.map(follower => follower.username);
+        let mutualFollowersText = mutuals.length > 0 ? `Followed by ${mutuals[0]}` + (mutuals.length > 1 ? ` +${mutuals.length - 1} more` : '') : undefined;
+
+        // Conditionally add followers field based on mutual followers count
+        const userResponse = {
+            name: user.name,
+            username: user.username,
+            avatar: user.avatar
+        };
+
+        if (mutuals.length > 0) {
+            userResponse.mutualFollowers = mutualFollowersText;
+            // Conditionally add followers field based on mutual followers text
+            // if (mutualFollowersText === `Followed by ${mutuals[0]}`) {
+            //     userResponse.followers = userId;
+            // }
+        }
+
+        return userResponse;
+    }));
+
+    // Cache the results for future requests
+    await client.set(cacheKey, JSON.stringify(enhancedUsers), { EX: 3600 }); // Cache for 1 hour
+
+    res.status(200).json({
+        users: enhancedUsers,
+    });
 });
