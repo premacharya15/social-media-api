@@ -12,9 +12,9 @@ export const generateOTP = () => {
 
 export const sendOTPEmail = async (email, otp, subject = "OTP Verification", message = "Here is your OTP:") => {
   let transporter = nodemailer.createTransport({
-    host: process.env.HOST,
+    service: "gmail",
     // port: 587, // Common port for SMTP. Adjust if your provider uses a different port
-    secure: true, // true for 465, false for other ports
+    // secure: true, // true for 465, false for other ports
     auth: {
       user: process.env.EMAIL,
       pass: process.env.EMAIL_PASSWORD,
