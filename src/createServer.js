@@ -7,7 +7,7 @@ import userRoutes from './routes/userRoutes.js';
 import postRoutes from './routes/postRoutes.js';
 import errorHandler from './middleware/errorHandler.js';
 import cors from 'cors';
-import client from './utils/redisClient.js';
+import client, { isRedisConnected } from './utils/redisClient.js';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -53,20 +53,9 @@ export async function createServer() {
   }
 
   // Check Redis connection
-  client.on('connect', () => {
-    console.log(chalk.yellow('Redis Status:'), chalk.bold.green('Connected'));
-    console.log(chalk.yellow('Redis listening on:'), chalk.bold.green('http://localhost:8001'));
-  });
-
-  client.on('error', (err) => {
-    console.log(chalk.yellow('Redis Status:'), chalk.bold.red('Disconnected'));
-    console.log(chalk.yellow('Redis Error:'), chalk.bold.red(`Disconnected - ${err}`));
-  });
-
-  // Immediately check Redis connection status
-  console.log(chalk.yellow('Redis Status:'), client.isOpen ? chalk.bold.green('Connected') : chalk.bold.red('Disconnected'));
-  console.log(' ')
-  console.log(chalk.yellow('Redis listening on:'), client.isOpen ? chalk.bold.green('http://localhost:8001') : chalk.bold.red('Disconnected'));
+  const redisConnected = await isRedisConnected();
+  console.log(chalk.yellow('Redis Status:'), redisConnected ? chalk.bold.green('Connected') : chalk.bold.red('Disconnected'));
+  console.log(chalk.yellow('Redis listening on:'), redisConnected ? chalk.bold.green('http://localhost:8001') : chalk.bold.red('Not available'));
 
   app.use(json());
   app.use(urlencoded({ extended: true }));
@@ -90,13 +79,13 @@ export async function createServer() {
   function getIPv4Address() {
     const interfaces = os.networkInterfaces();
     for (const name of Object.keys(interfaces)) {
-        if (name.includes('Wi-Fi') || name.includes('Wireless') || name.includes('wlp2s0') || name.startsWith('en') || name.startsWith('eth')) {
-            for (const iface of interfaces[name]) {
-                if (iface.family === 'IPv4' && !iface.internal) {
-                    return iface.address;
-                }
-            }
+      if (name.includes('Wi-Fi') || name.includes('Wireless') || name.includes('wlp2s0') || name.startsWith('en') || name.startsWith('eth')) {
+        for (const iface of interfaces[name]) {
+          if (iface.family === 'IPv4' && !iface.internal) {
+            return iface.address;
+          }
         }
+      }
     }
     return 'localhost';
   }

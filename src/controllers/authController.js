@@ -2,7 +2,7 @@ import User from '../models/userModel.js';
 import bcrypt from 'bcryptjs';
 import { generateOTP, sendOTPEmail } from '../services/mailService.js';
 import { generateToken } from '../utils/generateToken.js';
-import client from '../utils/redisClient.js';
+import client, { isRedisConnected } from '../utils/redisClient.js';
 import catchAsync from '../middleware/catchAsync.js';
 import { generateUniqueUsername } from '../utils/generateUniqueUsername.js';
 
@@ -100,11 +100,15 @@ export const login = catchAsync (async (req, res) => {
   const { email, password } = req.body;
 
   try {
+    let user = null;
+    const redisConnected = await isRedisConnected();
 
-    const cachedUser = await client.get(email);
-    let user = cachedUser ? JSON.parse(cachedUser) : null;
+    if (redisConnected) {
+      const cachedUser = await client.get(email);
+      user = cachedUser ? JSON.parse(cachedUser) : null;
+    }
 
-    // If not in Redis, retrieve from database and check if user exists
+    // If not in Redis or Redis is not connected, retrieve from database
     if (!user) {
       user = await User.findOne({ email });
       if (!user) {
@@ -130,8 +134,8 @@ export const login = catchAsync (async (req, res) => {
 
     const token = generateToken({ userId: user._id }, '2h'); // Expires in 2 hours
 
-    // Store user data in Redis cache if it was not already cached
-    if (!cachedUser) {
+    // Store user data in Redis cache if Redis is connected and user was not already cached
+    if (redisConnected && !user.cachedUser) {
       await client.set(email, JSON.stringify(user), { EX: 432000 }); // Expires in 5 days
     }
 
@@ -157,7 +161,9 @@ export const forgotPassword = catchAsync (async (req, res) => {
     await sendOTPEmail(email, otp, "Password Reset OTP", "Here is your OTP to reset your password");
 
     // Set a temporary flag in Redis to verify OTP before allowing password reset
-    await client.set(`otp_verified_${user._id}`, 'false', { EX: 300 }); // Expires in 5 minutes
+    if (await isRedisConnected()) {
+      await client.set(`otp_verified_${user._id}`, 'false', { EX: 300 }); // Expires in 5 minutes
+    }
 
     res.status(200).json({ message: "OTP sent to your email address!" });
   } catch (error) {
@@ -176,7 +182,10 @@ export const verifyForgotPasswordOTP = catchAsync (async (req, res) => {
       return res.status(404).json({ message: "User not found!" });
     }
 
-    const isOtpVerified = await client.get(`otp_verified_${user._id}`);
+    let isOtpVerified = false;
+    if (await isRedisConnected()) {
+      isOtpVerified = await client.get(`otp_verified_${user._id}`);
+    }
     if (!isOtpVerified) {
       user.otp = null; // Clear the OTP as it's no longer valid
       await user.save();
@@ -184,7 +193,9 @@ export const verifyForgotPasswordOTP = catchAsync (async (req, res) => {
     }
 
     if (user.otp === otp) {
-      await client.set(`otp_verified_${user._id}`, 'true', { EX: 300 }); // OTP verified, allow password reset for 5 minutes
+      if (await isRedisConnected()) {
+        await client.set(`otp_verified_${user._id}`, 'true', { EX: 300 }); // OTP verified, allow password reset for 5 minutes
+      }
       res.status(200).json({ message: "OTP verified!" });
     } else {
       res.status(400).json({ message: "Invalid OTP!" });
@@ -205,10 +216,15 @@ export const resetPassword = catchAsync (async (req, res) => {
       return res.status(404).json({ message: "User not found!" });
     }
 
-    // Check if OTP is verified
-    const isOtpVerified = await client.get(`otp_verified_${user._id}`);
-    if (!isOtpVerified || isOtpVerified === 'false') {
-      return res.status(400).json({ message: 'OTP verification failed or expired!' });
+    // Check if Redis is connected before performing cache operations
+    if (await isRedisConnected()) {
+      // Check if OTP is verified
+      const isOtpVerified = await client.get(`otp_verified_${user._id}`);
+      if (!isOtpVerified || isOtpVerified === 'false') {
+        return res.status(400).json({ message: 'OTP verification failed or expired!' });
+      }
+    } else {
+      return res.status(500).json({ message: "Redis connection error" });
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
@@ -216,7 +232,9 @@ export const resetPassword = catchAsync (async (req, res) => {
     user.otp = null;
     await user.save();
 
-    await client.del(`otp_verified_${user._id}`);
+    if (await isRedisConnected()) {
+      await client.del(`otp_verified_${user._id}`);
+    }
 
     res.status(200).json({ message: "Password reset successfully!" });
   } catch (error) {

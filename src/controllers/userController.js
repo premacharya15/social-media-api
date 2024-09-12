@@ -4,7 +4,7 @@ import fs from 'fs';
 import multer from 'multer';
 import User from '../models/userModel.js';
 import catchAsync from '../middleware/catchAsync.js';
-import client from '../utils/redisClient.js';
+import client, { isRedisConnected } from '../utils/redisClient.js';
 import Post from '../models/postModel.js';
 
 // Convert URL to path for __dirname equivalent in ESM
@@ -40,12 +40,17 @@ const upload = multer({ storage: storage });
 export const getAccountDetails = catchAsync(async (req, res) => {
     const userId = req.user._id;
 
-    // Attempt to retrieve user data from Redis cache
-    const cachedUser = await client.get(`user_${userId}`);
-    let user = cachedUser ? JSON.parse(cachedUser) : null;
+    let user = null;
     let postCount;
 
-    // If user data is not in Redis, retrieve from database and update cache
+    // Check if Redis is connected before performing cache operations
+    if (await isRedisConnected()) {
+        // Attempt to retrieve user data from Redis cache
+        const cachedUser = await client.get(`user_${userId}`);
+        user = cachedUser ? JSON.parse(cachedUser) : null;
+    }
+
+    // If user data is not in Redis or Redis is not connected, retrieve from database
     if (!user) {
         // Retrieve user from database without sensitive and unnecessary fields
         user = await User.findById(userId).select('-password -otp -posts -saved -followers -following -__v').populate('posts');
@@ -56,9 +61,11 @@ export const getAccountDetails = catchAsync(async (req, res) => {
         // Get post count
         postCount = user.posts.length; // Use the length of the posts array
 
-        // Cache the user data along with post count in Redis for future requests
-        const userData = { ...user.toObject(), postCount };
-        await client.set(`user_${userId}`, JSON.stringify(userData), { EX: 3600 });
+        // Cache the user data along with post count in Redis for future requests if Redis is connected
+        if (await isRedisConnected()) {
+            const userData = { ...user.toObject(), postCount };
+            await client.set(`user_${userId}`, JSON.stringify(userData), { EX: 3600 });
+        }
     } else {
         postCount = user.postCount;
     }
@@ -89,9 +96,11 @@ export const deleteProfile = catchAsync(async (req, res) => {
         return res.status(404).json({ message: 'User not found' });
     }
 
-    // Delete the user's data from Redis cache
-    await client.del(user.email);
-    await client.del(`user_${user._id}`);
+    // Delete the user's data from Redis cache if Redis is connected
+    if (await isRedisConnected()) {
+        await client.del(user.email);
+        await client.del(`user_${user._id}`);
+    }
 
     res.status(200).json({ message: 'Profile deleted successfully' });
 });
@@ -180,17 +189,20 @@ export const updateProfile = catchAsync(async (req, res) => {
   // Get post count
   const postCount = await Post.countDocuments({ postedBy: userId });
 
-  // Update the user data in Redis cache
-  const userDataToCache = {
-    ...user.toObject(),
-    postCount
-  };
-  await client.set(`user_${userId}`, JSON.stringify(userDataToCache), { EX: 3600 }); // Cache for 1 hour
+  // Update the user data in Redis cache if Redis is connected
+  if (await isRedisConnected()) {
+    const userDataToCache = {
+      ...user.toObject(),
+      postCount
+    };
+    await client.set(`user_${userId}`, JSON.stringify(userDataToCache), { EX: 3600 }); // Cache for 1 hour
+  }
 
   res.status(200).json({
     message: 'Profile updated successfully!',
     user: {
-      ...userDataToCache
+      ...user.toObject(),
+      postCount
     }
   });
 });
@@ -202,8 +214,11 @@ export { upload };
 export const logoutUser = catchAsync(async (req, res) => {
     const userId = req.user._id;
 
-    // Delete the user's session data from Redis
-    await client.del(`user_${userId}`);
+    // Check if Redis is connected before performing cache operations
+    if (await isRedisConnected()) {
+        // Delete the user's session data from Redis
+        await client.del(`user_${userId}`);
+    }
 
     res.status(200).json({ message: 'Logged out successfully!' });
 });
@@ -265,13 +280,18 @@ export const getUserDetails = catchAsync(async (req, res) => {
     const { username } = req.params;
     const redisKey = `user_details_${username}`;
 
-    // Try to get data from Redis first
-    const cachedData = await client.get(redisKey);
-    if (cachedData) {
-        return res.status(200).json({ user: JSON.parse(cachedData) });
+    // Check if Redis is connected
+    const redisConnected = await isRedisConnected();
+
+    if (redisConnected) {
+        // Try to get data from Redis first
+        const cachedData = await client.get(redisKey);
+        if (cachedData) {
+            return res.status(200).json({ user: JSON.parse(cachedData) });
+        }
     }
 
-    // Fetch from database if not in cache
+    // Fetch from database if not in cache or Redis is not connected
     const user = await User.findOne({ username }).select('-password -otp -posts -saved -followers -following -email -dateOfBirth -verified -createdAt -updatedAt -__v');
     if (!user) {
         return res.status(404).json({ message: 'User not found' });
@@ -280,9 +300,11 @@ export const getUserDetails = catchAsync(async (req, res) => {
     // Get post count
     const postCount = await Post.countDocuments({ postedBy: user._id });
 
-    // Cache the user data in Redis and return response
+    // Cache the user data in Redis if connected and return response
     const userData = { ...user.toObject(), postCount };
-    await client.set(redisKey, JSON.stringify(userData), { EX: 3600 }); // Cache for 1 hour
+    if (redisConnected) {
+        await client.set(redisKey, JSON.stringify(userData), { EX: 3600 }); // Cache for 1 hour
+    }
     res.status(200).json({ userData });
 });
 
@@ -326,10 +348,15 @@ export const searchUsers = catchAsync(async (req, res, next) => {
 
     const regexPattern = `^${keyword}`;
     const cacheKey = `search_${keyword}_${userId}`;
-    const cachedResults = await client.get(cacheKey);
 
-    if (cachedResults) {
-        return res.status(200).json(JSON.parse(cachedResults));
+    // Check if Redis is connected
+    const redisConnected = await isRedisConnected();
+
+    if (redisConnected) {
+        const cachedResults = await client.get(cacheKey);
+        if (cachedResults) {
+            return res.status(200).json(JSON.parse(cachedResults));
+        }
     }
 
     // Fetch the list of user IDs the current user is following
@@ -381,8 +408,10 @@ export const searchUsers = catchAsync(async (req, res, next) => {
         return userResponse;
     }));
 
-    // Cache the results for future requests
-    await client.set(cacheKey, JSON.stringify(enhancedUsers), { EX: 3600 }); // Cache for 1 hour
+    // Cache the results for future requests if Redis is connected
+    if (redisConnected) {
+        await client.set(cacheKey, JSON.stringify(enhancedUsers), { EX: 3600 }); // Cache for 1 hour
+    }
 
     res.status(200).json({
         users: enhancedUsers,

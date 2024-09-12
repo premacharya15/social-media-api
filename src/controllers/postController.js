@@ -4,7 +4,7 @@ import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import client from '../utils/redisClient.js';
+import client, { isRedisConnected } from '../utils/redisClient.js';
 import User from '../models/userModel.js';
 
 // Convert URL to path for __dirname equivalent in ESM
@@ -54,26 +54,29 @@ export const createPost = catchAsync(async (req, res) => {
   user.posts.push(newPost._id);
   await user.save();
 
-  // Invalidate Redis cache for the user's posts
-  const redisKeyPattern = `user_posts_${postedBy}_*`;
-  const keys = await client.keys(redisKeyPattern);
-  await Promise.all(keys.map(key => client.del(key)));
+  // Check if Redis is connected before performing cache operations
+  if (await isRedisConnected()) {
+    // Invalidate Redis cache for the user's posts
+    const redisKeyPattern = `user_posts_${postedBy}_*`;
+    const keys = await client.keys(redisKeyPattern);
+    await Promise.all(keys.map(key => client.del(key)));
 
-  // Update post count in user's Redis entry
-  const cachedUser = await client.get(`user_${postedBy}`);
-  if (cachedUser) {
-    const userData = JSON.parse(cachedUser);
-    userData.postCount = user.posts.length; // Use the length of the posts array
-    await client.set(`user_${postedBy}`, JSON.stringify(userData), { EX: 3600 });
+    // Update post count in user's Redis entry
+    const cachedUser = await client.get(`user_${postedBy}`);
+    if (cachedUser) {
+      const userData = JSON.parse(cachedUser);
+      userData.postCount = user.posts.length; // Use the length of the posts array
+      await client.set(`user_${postedBy}`, JSON.stringify(userData), { EX: 3600 });
 
-    // Update user details cache as well
-    const username = userData.username;
-    const userDetailKey = `user_details_${username}`;
-    const cachedUserDetails = await client.get(userDetailKey);
-    if (cachedUserDetails) {
-      const userDetails = JSON.parse(cachedUserDetails);
-      userDetails.postCount = userData.postCount;
-      await client.set(userDetailKey, JSON.stringify(userDetails), { EX: 3600 });
+      // Update user details cache as well
+      const username = userData.username;
+      const userDetailKey = `user_details_${username}`;
+      const cachedUserDetails = await client.get(userDetailKey);
+      if (cachedUserDetails) {
+        const userDetails = JSON.parse(cachedUserDetails);
+        userDetails.postCount = userData.postCount;
+        await client.set(userDetailKey, JSON.stringify(userDetails), { EX: 3600 });
+      }
     }
   }
 
@@ -100,22 +103,27 @@ export const getUserPosts = catchAsync(async (req, res) => {
   // Redis key to store cached data
   const redisKey = `user_posts_${userId}_page_${page}`;
 
-  // Try to fetch data from Redis first
-  const cachedPosts = await client.get(redisKey);
+  // Check if Redis is connected before performing cache operations
+  if (await isRedisConnected()) {
+    // Try to fetch data from Redis first
+    const cachedPosts = await client.get(redisKey);
 
-  if (cachedPosts) {
-    // If data is found in Redis, return it
-    return res.status(200).json(JSON.parse(cachedPosts));
+    if (cachedPosts) {
+      // If data is found in Redis, return it
+      return res.status(200).json(JSON.parse(cachedPosts));
+    }
   }
 
-  // If not in Redis, fetch from database
+  // If not in Redis or Redis is not connected, fetch from database
   const userPosts = await Post.find({ postedBy: userId })
                               .skip(skip)
                               .limit(limit)
                               .populate('postedBy', 'name');
 
-  // Cache the result in Redis
-  await client.set(redisKey, JSON.stringify(userPosts), { EX: 3600 }); // Cache for 1 hour
+  // Cache the result in Redis if connected
+  if (await isRedisConnected()) {
+    await client.set(redisKey, JSON.stringify(userPosts), { EX: 3600 }); // Cache for 1 hour
+  }
 
   res.status(200).json(userPosts);
 });
