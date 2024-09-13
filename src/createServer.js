@@ -7,7 +7,7 @@ import userRoutes from './routes/userRoutes.js';
 import postRoutes from './routes/postRoutes.js';
 import errorHandler from './middleware/errorHandler.js';
 import cors from 'cors';
-import client, { isRedisConnected } from './utils/redisClient.js';
+import { isRedisConnected } from './utils/redisClient.js';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -24,6 +24,9 @@ export async function createServer() {
 
   // Initialize the app
   const app = express();
+
+  // Set trust proxy more restrictively
+  app.set('trust proxy', 1); // Adjust this based on your actual proxy setup
 
   // Apply rate limiting middleware globally
   app.use(limiter);
