@@ -155,7 +155,7 @@ export const sendOTPEmail = async (email, otp, subject = "OTP Verification", mes
     <body>
       <div class="container">
         <div class="content">
-          <img src="https://lh3.googleusercontent.com/u/0/drive-viewer/AKGpihbgrHP0syyhJ7-tGWJUDN6embcKtJMcfb_o9Aj1Qv53QUzaj8s7rcGnVWokFbOFav_MuAsLs4QcurMuSP-ItrByp1N_8nNzfLA=w1920-h912" alt="company logo">
+          <img src=${process.env.BASE_URL}/images/logo.png alt="company logo">
           <h2>${subject}</h2>
           <p>${message}</p>
           <div class="otp">${otp}</div>

@@ -43,6 +43,9 @@ export async function createServer() {
   const uploadDirectory = path.join(__dirname, 'uploads');
   app.use('/uploads', protect, express.static(uploadDirectory));
 
+  // Serve static files from the public directory
+  const publicDirectory = path.join(__dirname, 'public');
+  app.use(express.static(publicDirectory));
 
   // Start the server
   console.log(chalk.yellow('Express Status:'), chalk.bold.green('Running'));
