@@ -85,7 +85,7 @@ export async function createServer() {
   function getIPv4Address() {
     const interfaces = os.networkInterfaces();
     for (const name of Object.keys(interfaces)) {
-      if (name.includes('Wi-Fi') || name.includes('Wireless') || name.includes('wlp2s0') || name.startsWith('en') || name.startsWith('eth')) {
+      if (name.includes('Wi-Fi') || name.includes('Wireless') || name.includes('wlp2s0') || name.startsWith('en') || name.startsWith('eth') || name.startsWith('Ethernet')) {
         for (const iface of interfaces[name]) {
           if (iface.family === 'IPv4' && !iface.internal) {
             return iface.address;
