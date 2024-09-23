@@ -4,7 +4,7 @@
   "type": "module",
   "main": "index.js",
   "repository": "https://github.com/prem-credsoft/social-media-api.git",
-  "author": "Credsoft Developer <premcredsoft@gmail.com>",
+  "author": "Prem Acharya <premcredsoft@gmail.com>",
   "license": "MIT",
   "dependencies": {
     "bcryptjs": "^2.4.3",
