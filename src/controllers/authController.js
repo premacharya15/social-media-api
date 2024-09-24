@@ -27,7 +27,6 @@ export const signUp = catchAsync (async (req, res) => {
       name,
       username: uniqueUsername,
       email,
-      phoneNumber,
       dateOfBirth,
       password: hashedPassword,
       verified: false,
@@ -96,7 +95,7 @@ export const resendOTP = catchAsync (async (req, res) => {
     // Send OTP email asynchronously to avoid blocking the response
     sendOTPEmail(email, newOtp, "OTP Resend", "Here is your OTP to verify your email address")
       .then(() => {
-        console.log(`resendotp: ${newOtp}`);
+        console.log(`resend-otp: ${newOtp}`);
         console.log(' ');
       })
       .catch((error) => {
@@ -173,11 +172,20 @@ export const forgotPassword = catchAsync (async (req, res) => {
     const otp = generateOTP();
     user.otp = otp;
     await user.save();
-    await sendOTPEmail(email, otp, "Password Reset OTP", "Here is your OTP to reset your password");
+
+    // Send OTP email asynchronously to avoid blocking the response
+    sendOTPEmail(email, otp, "Password Reset OTP", "Here is your OTP to reset your password")
+      .then(() => {
+        console.log(`forgotPassword-otp: ${otp}`);
+        console.log(' ');
+      })
+      .catch((error) => {
+        console.error('Error sending OTP email:', error);
+      });
 
     // Set a temporary flag in Redis to verify OTP before allowing password reset
     if (await isRedisConnected()) {
-      await client.set(`otp_verified_${user._id}`, 'false', { EX: 300 }); // Expires in 5 minutes
+      await client.set(`otp_verified_${user._id}`, 'false', { EX: 600 }); // Expires in 10 minutes
     }
 
     res.status(200).json({ message: "OTP sent to your email address!" });
@@ -192,25 +200,21 @@ export const verifyForgotPasswordOTP = catchAsync (async (req, res) => {
   const { email, otp } = req.body;
 
   try {
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).select('+otp');
     if (!user) {
       return res.status(404).json({ message: "User not found!" });
     }
 
-    let isOtpVerified = false;
-    if (await isRedisConnected()) {
-      isOtpVerified = await client.get(`otp_verified_${user._id}`);
-    }
-    if (!isOtpVerified) {
-      user.otp = null; // Clear the OTP as it's no longer valid
-      await user.save();
-      return res.status(400).json({ message: "OTP has expired. please try again." });
-    }
-
     if (user.otp === otp) {
-      if (await isRedisConnected()) {
-        await client.set(`otp_verified_${user._id}`, 'true', { EX: 300 }); // OTP verified, allow password reset for 5 minutes
-      }
+      user.otp = null;
+      const saveUserPromise = user.save();
+      const redisPromise = isRedisConnected().then(async (connected) => {
+        if (connected) {
+          await client.set(`otp_verified_${user._id}`, 'true', { EX: 300 }); // OTP verified, allow password reset for 5 minutes
+        }
+      });
+
+      await Promise.all([saveUserPromise, redisPromise]);
       res.status(200).json({ message: "OTP verified!" });
     } else {
       res.status(400).json({ message: "Invalid OTP!" });
@@ -226,32 +230,40 @@ export const resetPassword = catchAsync (async (req, res) => {
   const { email, password, otp } = req.body;
 
   try {
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).select('+otp, +password');
     if (!user) {
       return res.status(404).json({ message: "User not found!" });
     }
 
-    // Check if Redis is connected before performing cache operations
-    if (await isRedisConnected()) {
-      // Check if OTP is verified
-      const isOtpVerified = await client.get(`otp_verified_${user._id}`);
-      if (!isOtpVerified || isOtpVerified === 'false') {
-        return res.status(400).json({ message: 'OTP verification failed or expired!' });
-      }
+    const redisConnected = await isRedisConnected();
+    let isOtpVerified = false;
+
+    if (redisConnected) {
+      isOtpVerified = await client.get(`otp_verified_${user._id}`);
     } else {
-      return res.status(500).json({ message: "Redis connection error" });
+      isOtpVerified = user.otp === null;
+    }
+
+    if (!isOtpVerified || isOtpVerified === 'false') {
+      return res.status(400).json({ message: 'OTP verification failed or expired!' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
     user.password = hashedPassword;
     user.otp = null;
-    await user.save();
-
-    if (await isRedisConnected()) {
-      await client.del(`otp_verified_${user._id}`);
-    }
 
     res.status(200).json({ message: "Password reset successfully!" });
+
+    // Perform database and Redis operations in the background
+    user.save().catch((error) => {
+      console.error('Error saving user:', error);
+    });
+
+    if (redisConnected) {
+      client.del(`otp_verified_${user._id}`).catch((error) => {
+        console.error('Error deleting Redis key:', error);
+      });
+    }
   } catch (error) {
     res.status(500).json({ message: "Invalid or expired token!" });
   }
