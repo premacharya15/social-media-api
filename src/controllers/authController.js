@@ -137,6 +137,8 @@ export const login = catchAsync (async (req, res) => {
       await user.save();
       await sendOTPEmail(email, otp);
       const token = generateToken({ userId: user._id }, '2h');
+      console.log(`resend-otp: ${otp}`);
+      console.log(' ');
       return res.status(400).json({ message: 'User not verified. OTP resent.', token });
     }
 
@@ -279,7 +281,7 @@ export const verifyToken = catchAsync(async (req, res) => {
   }
 
   // Generate a new token for continued session
-  const newToken = generateToken({ userId: user._id }, '1d');
+  const newToken = generateToken({ userId: user._id }, '2d');
 
   res.status(200).json({
     message: 'Token is valid!',
