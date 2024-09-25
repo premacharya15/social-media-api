@@ -39,51 +39,51 @@ const upload = multer({ storage: storage });
 // Get User Details --Logged In User
 export const getAccountDetails = catchAsync(async (req, res) => {
     const userId = req.user._id;
+    const cacheKey = `user_${userId}`;
 
-    let user = null;
-    let postCount;
+    let userData;
 
-    // Check if Redis is connected before performing cache operations
+    // Try to get data from Redis cache first
     if (await isRedisConnected()) {
-        // Attempt to retrieve user data from Redis cache
-        const cachedUser = await client.get(`user_${userId}`);
-        user = cachedUser ? JSON.parse(cachedUser) : null;
+        const cachedUser = await client.get(cacheKey);
+        if (cachedUser) {
+            userData = JSON.parse(cachedUser);
+            return res.status(200).json({ user: userData });
+        }
     }
 
-    // If user data is not in Redis or Redis is not connected, retrieve from database
+    // If not in cache, fetch from database
+    const user = await User.findById(userId)
+        .select('username name bio website avatar')
+        .lean();
+
     if (!user) {
-        // Retrieve user from database without sensitive and unnecessary fields
-        user = await User.findById(userId).select('-password -otp -posts -saved -followers -following -__v').populate('posts');
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        // Get post count
-        postCount = user.posts.length; // Use the length of the posts array
-
-        // Cache the user data along with post count in Redis for future requests if Redis is connected
-        if (await isRedisConnected()) {
-            const userData = { ...user.toObject(), postCount };
-            await client.set(`user_${userId}`, JSON.stringify(userData), { EX: 3600 });
-        }
-    } else {
-        postCount = user.postCount;
+        return res.status(404).json({ message: 'User not found' });
     }
 
-    // Prepare a clean user object for response
-    const userData = {
-        _id: user._id,
-        username: user.username,
-        name: user.name,
-        email: user.email,
-        dateOfBirth: user.dateOfBirth,
-        verified: user.verified,
-        bio: user.bio,
-        website: user.website,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-        postCount
+    // Get counts using aggregation for better performance
+    const [counts] = await User.aggregate([
+        { $match: { _id: userId } },
+        {
+            $project: {
+                postCount: { $size: "$posts" },
+                followingCount: { $size: "$following" },
+                followersCount: { $size: "$followers" }
+            }
+        }
+    ]);
+
+    userData = {
+        ...user,
+        postCount: counts.postCount,
+        followingCount: counts.followingCount,
+        followersCount: counts.followersCount
     };
+
+    // Cache the user data in Redis for future requests
+    if (await isRedisConnected()) {
+        await client.set(cacheKey, JSON.stringify(userData), { EX: 3600 });
+    }
 
     res.status(200).json({ user: userData });
 });
