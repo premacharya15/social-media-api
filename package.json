@@ -2,7 +2,7 @@
   "name": "social-media-api",
   "version": "1.0.0",
   "type": "module",
-  "main": "index.js",
+  "main": "server.js",
   "repository": "https://github.com/prem-credsoft/social-media-api.git",
   "author": "Prem Acharya <premcredsoft@gmail.com>",
   "license": "MIT",
