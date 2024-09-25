@@ -212,12 +212,16 @@ export const verifyForgotPasswordOTP = catchAsync (async (req, res) => {
       const saveUserPromise = user.save();
       const redisPromise = isRedisConnected().then(async (connected) => {
         if (connected) {
-          await client.set(`otp_verified_${user._id}`, 'true', { EX: 300 }); // OTP verified, allow password reset for 5 minutes
+          await client.set(`otp_verified_${user._id}`, 'true', { EX: 600 }); // OTP verified, allow password reset for 10 minutes
         }
       });
 
       await Promise.all([saveUserPromise, redisPromise]);
-      res.status(200).json({ message: "OTP verified!" });
+
+      // Generate token for 10 minutes
+      const token = generateToken({ userId: user._id }, '10m');
+
+      res.status(200).json({ message: "OTP verified!", token });
     } else {
       res.status(400).json({ message: "Invalid OTP!" });
     }
