@@ -170,7 +170,13 @@ export const deleteProfile = catchAsync(async (req, res) => {
 // Update Username
 export const updateUsername = catchAsync(async (req, res) => {
     const { username } = req.body;
-    const user = await User.findById(req.user._id);
+    const userId = req.user._id;
+
+    // Perform all database operations concurrently
+    const [user, existingUser] = await Promise.all([
+        User.findById(userId),
+        User.findOne({ username })
+    ]);
 
     if (!user) {
         return res.status(404).json({ message: 'User not found' });
@@ -180,15 +186,21 @@ export const updateUsername = catchAsync(async (req, res) => {
         return res.status(200).json({ message: 'No change in username.' });
     }
 
-    const existingUser = await User.findOne({ username });
     if (existingUser) {
-        return getUsernameSuggestions(req, res, username);
+        // Initiate username suggestions asynchronously
+        getUsernameSuggestions(req, res, username);
+        return;
     }
 
+    // Update username
     user.username = username;
-    await user.save();
-    res.status(200).json({ message: 'Username updated successfully!' });
+    user.save().then(() => {
+        res.status(200).json({ message: 'Username updated successfully!' });
+    }).catch(error => {
+        res.status(500).json({ message: 'Error updating username', error: error.message });
+    });
 });
+
 
 // Username Suggestions
 export const getUsernameSuggestions = catchAsync(async (req, res, attemptedUsername) => {
