@@ -233,50 +233,44 @@ export const getUsernameSuggestions = catchAsync(async (req, res, attemptedUsern
 // Update Profile
 export const updateProfile = catchAsync(async (req, res) => {
   const userId = req.user._id;
-  const user = await User.findById(userId);
+  const updateFields = {};
+
+  // Only update fields that are provided
+  if (req.body.name) updateFields.name = req.body.name;
+  if (req.body.username) updateFields.username = req.body.username;
+  if (req.body.bio) updateFields.bio = req.body.bio;
+  if (req.body.website) updateFields.website = req.body.website;
+
+  // Handle avatar update
+  if (req.file) {
+    const uploadPath = path.join(__dirname, '..', 'uploads', `user_${userId}`);
+    ensureDirSync(uploadPath);
+    const avatarFilename = `avatar.png`;
+    const fullPath = path.join(uploadPath, avatarFilename);
+    
+    // Use promises for file operations
+    await fs.promises.rename(req.file.path, fullPath);
+    
+    // Convert full path to a relative path with backslashes
+    const relativePath = path.relative(path.join(__dirname, '..'), fullPath).replace(/\//g, '\\');
+    updateFields.avatar = relativePath;
+  }
+
+  // Update user and get the updated document
+  const user = await User.findByIdAndUpdate(userId, updateFields, { new: true, runValidators: true });
+
   if (!user) {
     return res.status(404).json({ message: 'User not found' });
   }
 
-  // Update user fields if provided
-  user.name = req.body.name || user.name;
-  user.username = req.body.username || user.username;
-  user.bio = req.body.bio || user.bio;
-  user.website = req.body.website || user.website;
-
-  // Handle avatar update
-  if (req.file) {
-    const uploadPath = path.join(__dirname, '..', 'uploads', `user_${req.user._id}`);
-    ensureDirSync(uploadPath); // Ensure the directory exists
-    const avatarFilename = `avatar.png`;
-    const fullPath = path.join(uploadPath, avatarFilename);
-    fs.renameSync(req.file.path, fullPath); // Move the file to the new path
-    
-    // Convert full path to a relative path with backslashes
-    const relativePath = path.relative(path.join(__dirname, '..'), fullPath).replace(/\//g, '\\');
-    user.avatar = relativePath;
-  }
-
-  await user.save();
-
-  // Get post count
-  const postCount = await Post.countDocuments({ postedBy: userId });
-
-  // Update the user data in Redis cache if Redis is connected
+  // Update Redis cache asynchronously
   if (await isRedisConnected()) {
-    const userDataToCache = {
-      ...user.toObject(),
-      postCount
-    };
-    await client.set(`user_${userId}`, JSON.stringify(userDataToCache), { EX: 3600 }); // Cache for 1 hour
+    const userDataToCache = user.toObject();
+    client.set(`user_${userId}`, JSON.stringify(userDataToCache), { EX: 3600 }).catch(console.error);
   }
 
   res.status(200).json({
-    message: 'Profile updated successfully!',
-    user: {
-      ...user.toObject(),
-      postCount
-    }
+    message: 'Profile updated successfully!'
   });
 });
 
