@@ -211,18 +211,27 @@ export const getUsernameSuggestions = catchAsync(async (req, res, attemptedUsern
 
     const baseUsername = (typeof attemptedUsername === 'string' ? attemptedUsername : user.username).toLowerCase().replace(/\s+/g, '_');
     const suggestions = [];
-    let attempts = 0;
+    const maxAttempts = 10;
+    const requiredSuggestions = 3;
 
-    while (suggestions.length < 3 && attempts < 10) {
-        const potentialUsername = `${baseUsername}_${Math.floor(Math.random() * 1000)}`;
-        const existingUser = await User.findOne({ username: potentialUsername });
-        if (!existingUser) {
-            suggestions.push(potentialUsername);
+    // Generate all potential usernames upfront
+    const potentialUsernames = Array.from({ length: maxAttempts }, () => 
+        `${baseUsername}_${Math.floor(Math.random() * 1000)}`
+    );
+
+    // Check all usernames in a single database query
+    const existingUsers = await User.find({ username: { $in: potentialUsernames } }).select('username');
+    const existingUsernames = new Set(existingUsers.map(u => u.username));
+
+    // Filter unique usernames
+    for (const username of potentialUsernames) {
+        if (!existingUsernames.has(username)) {
+            suggestions.push(username);
+            if (suggestions.length === requiredSuggestions) break;
         }
-        attempts++;
     }
 
-    if (suggestions.length < 3) {
+    if (suggestions.length < requiredSuggestions) {
         return res.status(500).json({ message: 'Unable to generate unique username suggestions at this time.' });
     }
     // console.log(`Username already taken, Suggestions: ${suggestions}`);
