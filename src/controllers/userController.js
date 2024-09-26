@@ -6,6 +6,7 @@ import User from '../models/userModel.js';
 import catchAsync from '../middleware/catchAsync.js';
 import client, { isRedisConnected } from '../utils/redisClient.js';
 import Post from '../models/postModel.js';
+import { rm } from 'fs/promises';
 
 // Convert URL to path for __dirname equivalent in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -91,18 +92,78 @@ export const getAccountDetails = catchAsync(async (req, res) => {
 
 // delete User Profile
 export const deleteProfile = catchAsync(async (req, res) => {
-    const user = await User.findByIdAndDelete(req.user._id);
+    const userId = req.user._id;
+
+    // Start multiple asynchronous operations
+    const [user, userPosts] = await Promise.all([
+        User.findById(userId),
+        Post.find({ postedBy: userId })
+    ]);
+
     if (!user) {
         return res.status(404).json({ message: 'User not found' });
     }
 
-    // Delete the user's data from Redis cache if Redis is connected
-    if (await isRedisConnected()) {
-        await client.del(user.email);
-        await client.del(`user_${user._id}`);
-    }
+    // Prepare deletion operations
+    const deleteOperations = [
+        // Delete user's upload directory
+        (async () => {
+            const uploadPath = path.join(__dirname, '..', 'uploads', `user_${userId}`);
+            try {
+                await rm(uploadPath, { recursive: true, force: true });
+            } catch (err) {
+                console.error(`Error deleting user upload directory: ${err}`);
+            }
+        })(),
 
-    res.status(200).json({ message: 'Profile deleted successfully' });
+        // Delete user's posts and update related collections
+        ...userPosts.map(post => 
+            Promise.all([
+                Post.findByIdAndDelete(post._id),
+                User.updateMany(
+                    { $or: [{ posts: post._id }, { saved: post._id }] },
+                    { $pull: { posts: post._id, saved: post._id } }
+                )
+            ])
+        ),
+
+        // Remove user from other users' followers and following lists
+        User.updateMany(
+            { $or: [{ followers: userId }, { following: userId }] },
+            { $pull: { followers: userId, following: userId } }
+        ),
+
+        // Remove user's likes and comments from all posts
+        Post.updateMany(
+            { $or: [{ likes: userId }, { 'comments.user': userId }, { savedBy: userId }] },
+            { 
+                $pull: { 
+                    likes: userId, 
+                    comments: { user: userId },
+                    savedBy: userId
+                } 
+            }
+        ),
+
+        // Delete the user
+        User.findByIdAndDelete(userId),
+
+        // Delete the user's data from Redis cache if Redis is connected
+        (async () => {
+            if (await isRedisConnected()) {
+                await Promise.all([
+                    client.del(user.email),
+                    client.del(`user_${userId}`)
+                ]);
+            }
+        })()
+    ];
+
+    // Execute all deletion operations concurrently
+    await Promise.all(deleteOperations);
+
+    // Send response immediately after initiating deletion operations
+    res.status(200).json({ message: 'Profile deletion initiated. All associated data will be removed shortly.' });
 });
 
 
