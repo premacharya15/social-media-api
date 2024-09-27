@@ -43,7 +43,7 @@ node_modules/
 jspm_packages/
 
 # uploads - all user uploads of avatars and posts
-# uploads
+uploads
 
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
