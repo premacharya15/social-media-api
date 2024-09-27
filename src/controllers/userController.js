@@ -295,7 +295,7 @@ export const logoutUser = catchAsync(async (req, res) => {
         await client.del(`user_${userId}`).catch(console.error);
     }
 
-    res.status(200).json({ message: 'Logged out successfully!' });
+    res.status(200).json({ message: 'Logged out successfully!', token: null });
 });
 
 
@@ -393,22 +393,34 @@ export const followUser = catchAsync(async (req, res) => {
         return res.status(400).json({ message: "You cannot follow yourself." });
     }
 
-    const targetUser = await User.findById(targetUserId);
+    const [targetUser, currentUser] = await Promise.all([
+        User.findById(targetUserId),
+        User.findById(userId)
+    ]);
+
     if (!targetUser) {
         return res.status(404).json({ message: "User not found" });
     }
 
-    const isFollowing = req.user.following.includes(targetUserId);
-    if (isFollowing) {
-        // Unfollow user
-        await User.findByIdAndUpdate(userId, { $pull: { following: targetUserId } });
-        await User.findByIdAndUpdate(targetUserId, { $pull: { followers: userId } });
-        res.status(200).json({ message: "User unfollowed" });
-    } else {
-        // Follow user
-        await User.findByIdAndUpdate(userId, { $addToSet: { following: targetUserId } });
-        await User.findByIdAndUpdate(targetUserId, { $addToSet: { followers: userId } });
-        res.status(200).json({ message: "User followed" });
+    const isFollowing = currentUser.following.includes(targetUserId);
+    const updateOperations = isFollowing
+        ? [
+            { updateOne: { filter: { _id: userId }, update: { $pull: { following: targetUserId } } } },
+            { updateOne: { filter: { _id: targetUserId }, update: { $pull: { followers: userId } } } }
+          ]
+        : [
+            { updateOne: { filter: { _id: userId }, update: { $addToSet: { following: targetUserId } } } },
+            { updateOne: { filter: { _id: targetUserId }, update: { $addToSet: { followers: userId } } } }
+          ];
+
+    await User.bulkWrite(updateOperations);
+
+    const message = isFollowing ? "User unfollowed" : "User followed";
+    res.status(200).json({ message });
+
+    // Delete Redis cache for the current user after successful follow/unfollow
+    if (await isRedisConnected()) {
+        client.del(`user_${targetUserId}`).catch(console.error);
     }
 });
 
