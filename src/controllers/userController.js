@@ -353,18 +353,7 @@ export const discoverPeople = catchAsync(async (req, res) => {
 // get userdetils with username
 export const getUserDetails = catchAsync(async (req, res) => {
     const { username } = req.params;
-    const redisKey = `user_details_${username}`;
 
-    // Check if Redis is connected and try to get data from Redis first
-    const redisConnected = await isRedisConnected();
-    if (redisConnected) {
-        const cachedData = await client.get(redisKey);
-        if (cachedData) {
-            return res.status(200).json({ user: JSON.parse(cachedData) });
-        }
-    }
-
-    // Fetch from database if not in cache or Redis is not connected
     const user = await User.findOne({ username })
         .select('_id name bio website username avatar')
         .lean(); // Use lean() for faster query execution
@@ -390,12 +379,6 @@ export const getUserDetails = catchAsync(async (req, res) => {
         ...user,
         ...counts
     };
-
-    // Cache the user data in Redis if connected (non-blocking)
-    if (redisConnected) {
-        client.set(redisKey, JSON.stringify(userData), { EX: 7200 })
-            .catch(err => console.error('Redis caching error:', err));
-    }
 
     res.status(200).json({ user: userData });
 });
