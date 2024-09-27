@@ -110,55 +110,39 @@ export const resendOTP = catchAsync (async (req, res) => {
 
 
 // Login 
-export const login = catchAsync (async (req, res) => {
+export const login = catchAsync(async (req, res) => {
   const { email, password } = req.body;
 
-  try {
-    let user = null;
-    const redisConnected = await isRedisConnected();
+  const user = await User.findOne({ email }).select('+password').lean();
+  if (!user) {
+    return res.status(404).json({ message: 'User does not exist!' });
+  }
 
-    if (redisConnected) {
-      const cachedUser = await client.get(email);
-      user = cachedUser ? JSON.parse(cachedUser) : null;
-    }
-
-    // If not in Redis or Redis is not connected, retrieve from database
-    if (!user) {
-      user = await User.findOne({ email }).select('+password');
-      if (!user) {
-        return res.status(404).json({ message: 'User does not exist!' });
-      }
-    }
-
-    // Check if user is verified
-    if (!user.verified) {
-      const otp = generateOTP();
-      user.otp = otp;
-      await user.save();
-      await sendOTPEmail(email, otp);
-      const token = generateToken({ userId: user._id }, '2h');
+  // Check if user is verified
+  if (!user.verified) {
+    const otp = generateOTP();
+    await User.updateOne({ _id: user._id }, { $set: { otp } });
+    
+    // Send OTP email asynchronously
+    process.nextTick(() => {
+      sendOTPEmail(email, otp).catch(error => console.error('Error sending OTP email:', error));
       console.log(`resend-otp: ${otp}`);
       console.log(' ');
-      return res.status(400).json({ message: 'User not verified. OTP resent.', token });
-    }
+    });
 
-    // Proceed with password check and login
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid credentials!' });
-    }
-
-    const token = generateToken({ userId: user._id }, '2d'); // Expires in 2 days
-
-    // Store user data in Redis cache if Redis is connected and user was not already cached
-    if (redisConnected && !user.cachedUser) {
-      await client.set(email, JSON.stringify(user), { EX: 432000 }); // Expires in 5 days
-    }
-
-    res.status(200).json({ message: 'Login successful!', token });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+    const token = generateToken({ userId: user._id }, '2h');
+    return res.status(400).json({ message: 'User not verified. OTP resent.', token });
   }
+
+  // Proceed with password check and login
+  const isMatch = await bcrypt.compare(password, user.password);
+  if (!isMatch) {
+    return res.status(401).json({ message: 'Invalid credentials!' });
+  }
+
+  const token = generateToken({ userId: user._id }, '2d'); // Expires in 2 days
+
+  res.status(200).json({ message: 'Login successful!', token });
 });
 
 
