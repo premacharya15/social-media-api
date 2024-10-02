@@ -306,47 +306,75 @@ export const discoverPeople = catchAsync(async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
+    // Check if Redis is connected and try to get cached data
+    if (await isRedisConnected()) {
+        const cacheKey = `user_${userId}_discoverPeople_page_${page}`;
+        const cachedData = await client.get(cacheKey);
+        if (cachedData) {
+            return res.status(200).json(JSON.parse(cachedData));
+        }
+    }
+
     // Fetch a list of user IDs that the current user is following
-    const user = await User.findById(userId).populate('following', '_id');
+    const user = await User.findById(userId).populate('following', '_id username');
     const followingIds = user.following.map(user => user._id);
+    const followingMap = new Map(user.following.map(user => [user._id.toString(), user.username]));
 
     // Find users that the current user is not following
     const potentialPeople = await User.find({
         _id: { $nin: [userId, ...followingIds] } // Exclude self and already followed users
     })
-    .select('_id name avatar followers')
+    .select('_id name avatar followers following')
     .skip(skip)
     .limit(limit)
     .lean(); // Use lean() for faster performance as we only read data
 
-    // Enhance potentialPeople with mutual followers information
-    const enhancedPeople = await Promise.all(potentialPeople.map(async person => {
-        // Find mutual followers
-        const mutualFollowers = await User.find({
-            _id: { $in: person.followers },
-            followers: userId
-        }).select('username');
+    // Enhance potentialPeople with followed by information
+    const enhancedPeople = potentialPeople.map(person => {
+        const mutualFollowers = person.followers.filter(followerId => 
+            followingMap.has(followerId.toString())
+        );
 
-        // Map usernames of mutual followers
-        const mutuals = mutualFollowers.map(follower => follower.username);
-        let mutualFollowersText = 'No mutual followers';
-        if (mutuals.length > 0) {
-            mutualFollowersText = `Followed by ${mutuals[0]}`;
-            if (mutuals.length > 1) {
-                mutualFollowersText += ` +${mutuals.length - 1} more`;
+        let followedBy = 'Suggest for you';
+        if (mutualFollowers.length > 0) {
+            if (mutualFollowers.length === 1) {
+                followedBy = `Followed by ${followingMap.get(mutualFollowers[0].toString())}`;
+            } else {
+                const firstFollower = followingMap.get(mutualFollowers[0].toString());
+                const otherCount = mutualFollowers.length - 1;
+                followedBy = `Followed by ${firstFollower} + ${otherCount} more`;
             }
         }
 
         return {
-            ...person,
-            mutualFollowers: mutualFollowersText
+            _id: person._id,
+            name: person.name,
+            avatar: person.avatar,
+            followedBy
         };
-    }));
-
-    res.status(200).json({
-        message: 'People you may know',
-        data: enhancedPeople
     });
+
+    const totalCount = await User.countDocuments({
+        _id: { $nin: [userId, ...followingIds] }
+    });
+
+    const totalPages = Math.ceil(totalCount / limit);
+
+    const responseData = {
+        message: 'People you may know',
+        data: enhancedPeople,
+        currentPage: page,
+        totalPages: totalPages,
+        totalCount: totalCount
+    };
+
+    // Cache the result in Redis if connected
+    if (await isRedisConnected()) {
+        const cacheKey = `user_${userId}_discoverPeople_page_${page}`;
+        await client.set(cacheKey, JSON.stringify(responseData), { EX: 3600 }); // Cache for 1 hour
+    }
+
+    res.status(200).json(responseData);
 });
 
 
@@ -389,20 +417,12 @@ export const followUser = catchAsync(async (req, res) => {
     const userId = req.user._id;
     const targetUserId = req.params.id;
 
-    if (userId === targetUserId) {
+    if (userId.toString() === targetUserId) {
         return res.status(400).json({ message: "You cannot follow yourself." });
     }
 
-    const [targetUser, currentUser] = await Promise.all([
-        User.findById(targetUserId),
-        User.findById(userId)
-    ]);
+    const isFollowing = await User.exists({ _id: userId, following: targetUserId });
 
-    if (!targetUser) {
-        return res.status(404).json({ message: "User not found" });
-    }
-
-    const isFollowing = currentUser.following.includes(targetUserId);
     const updateOperations = isFollowing
         ? [
             { updateOne: { filter: { _id: userId }, update: { $pull: { following: targetUserId } } } },
@@ -413,15 +433,29 @@ export const followUser = catchAsync(async (req, res) => {
             { updateOne: { filter: { _id: targetUserId }, update: { $addToSet: { followers: userId } } } }
           ];
 
-    await User.bulkWrite(updateOperations);
+    const result = await User.bulkWrite(updateOperations);
+
+    if (result.modifiedCount === 0) {
+        return res.status(404).json({ message: "User not found or no changes made" });
+    }
 
     const message = isFollowing ? "User unfollowed" : "User followed";
     res.status(200).json({ message });
 
-    // Delete Redis cache for the current user after successful follow/unfollow
-    if (await isRedisConnected()) {
-        client.del(`user_${targetUserId}`).catch(console.error);
-    }
+    // Asynchronously handle cache deletion
+    setImmediate(async () => {
+        if (await isRedisConnected()) {
+            const deletePromises = [
+                client.del(`user_${userId}`),
+                client.del(`user_${targetUserId}`),
+                client.keys(`user_${userId}_discoverPeople_page_*`).then(keys => {
+                    if (keys.length > 0) return client.del(keys);
+                })
+            ];
+            
+            await Promise.all(deletePromises).catch(console.error);
+        }
+    });
 });
 
 
