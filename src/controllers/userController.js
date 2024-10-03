@@ -450,6 +450,9 @@ export const followUser = catchAsync(async (req, res) => {
                 client.del(`user_${targetUserId}`),
                 client.keys(`user_${userId}_discoverPeople_page_*`).then(keys => {
                     if (keys.length > 0) return client.del(keys);
+                }),
+                client.keys(`user_${userId}_search_*`).then(keys => {
+                    if (keys.length > 0) return client.del(keys);
                 })
             ];
             
@@ -468,7 +471,7 @@ export const searchUsers = catchAsync(async (req, res, next) => {
     }
 
     const regexPattern = `^${keyword}`;
-    const cacheKey = `search_${keyword}_${userId}`;
+    const cacheKey = `user_${userId}_search_${keyword}`;
 
     // Check if Redis is connected
     const redisConnected = await isRedisConnected();
