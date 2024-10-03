@@ -466,12 +466,16 @@ export const followUser = catchAsync(async (req, res) => {
 export const searchUsers = catchAsync(async (req, res, next) => {
     const { keyword } = req.query;
     const userId = req.user._id;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
     if (!keyword) {
         return res.status(400).json({ message: "Keyword is required" });
     }
 
     const regexPattern = `^${keyword}`;
-    const cacheKey = `user_${userId}_search_${keyword}`;
+    const cacheKey = `user_${userId}_search_${keyword}_page_${page}`;
 
     // Check if Redis is connected
     const redisConnected = await isRedisConnected();
@@ -487,7 +491,7 @@ export const searchUsers = catchAsync(async (req, res, next) => {
     const currentUser = await User.findById(userId).select('following');
     const followingIds = currentUser.following.map(follow => follow.toString());
 
-    const users = await User.find({
+    const query = {
         $and: [
             { _id: { $ne: userId } }, // Exclude the current user
             { _id: { $nin: followingIds } }, // Exclude users already followed
@@ -498,7 +502,16 @@ export const searchUsers = catchAsync(async (req, res, next) => {
                 ]
             }
         ]
-    }).select('name username avatar followers').limit(10).lean();
+    };
+
+    const totalCount = await User.countDocuments(query);
+    const totalPages = Math.ceil(totalCount / limit);
+
+    const users = await User.find(query)
+        .select('name username avatar followers')
+        .skip(skip)
+        .limit(limit)
+        .lean();
 
     if (users.length === 0) {
         return res.status(404).json({ message: "No users found" });
@@ -532,12 +545,17 @@ export const searchUsers = catchAsync(async (req, res, next) => {
         return userResponse;
     }));
 
+    const responseData = {
+        users: enhancedUsers,
+        currentPage: page,
+        totalPages: totalPages,
+        totalCount: totalCount
+    };
+
     // Cache the results for future requests if Redis is connected
     if (redisConnected) {
-        await client.set(cacheKey, JSON.stringify(enhancedUsers), { EX: 3600 }); // Cache for 1 hour
+        await client.set(cacheKey, JSON.stringify(responseData), { EX: 3600 }); // Cache for 1 hour
     }
 
-    res.status(200).json({
-        users: enhancedUsers,
-    });
+    res.status(200).json(responseData);
 });
