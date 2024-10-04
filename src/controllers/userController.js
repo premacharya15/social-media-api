@@ -493,8 +493,6 @@ export const searchUsers = catchAsync(async (req, res, next) => {
 
     const query = {
         $and: [
-            { _id: { $ne: userId } }, // Exclude the current user
-            { _id: { $nin: followingIds } }, // Exclude users already followed
             {
                 $or: [
                     { name: { $regex: regexPattern, $options: "i" } },
