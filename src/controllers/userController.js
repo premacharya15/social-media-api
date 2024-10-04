@@ -535,7 +535,7 @@ export const searchUsers = catchAsync(async (req, res, next) => {
         };
 
         if (mutuals.length > 0) {
-            userResponse.mutualFollowers = mutualFollowersText;
+            userResponse.followedBy = mutualFollowersText;
             // Conditionally add followers field based on mutual followers text
             // if (mutualFollowersText === `Followed by ${mutuals[0]}`) {
             //     userResponse.followers = userId;
