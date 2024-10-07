@@ -487,18 +487,10 @@ export const searchUsers = catchAsync(async (req, res, next) => {
         }
     }
 
-    // Fetch the list of user IDs the current user is following
-    const currentUser = await User.findById(userId).select('following');
-    const followingIds = currentUser.following.map(follow => follow.toString());
-
     const query = {
-        $and: [
-            {
-                $or: [
-                    { name: { $regex: regexPattern, $options: "i" } },
-                    { username: { $regex: regexPattern, $options: "i" } }
-                ]
-            }
+        $or: [
+            { name: { $regex: regexPattern, $options: "i" } },
+            { username: { $regex: regexPattern, $options: "i" } }
         ]
     };
 
