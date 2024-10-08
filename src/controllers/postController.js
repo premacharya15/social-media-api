@@ -4,6 +4,7 @@ import User from '../models/userModel.js';
 import upload from '../utils/uploadImages.js';
 import multer from 'multer';
 
+
 // Create New Post
 export const createPost = catchAsync(async (req, res) => {
   const { caption } = req.body;
@@ -22,6 +23,7 @@ export const createPost = catchAsync(async (req, res) => {
     userId: postedBy
   });
 });
+
 
 // Upload multiple images for a post
 export const uploadPostImages = catchAsync(async (req, res) => {
@@ -51,9 +53,18 @@ export const uploadPostImages = catchAsync(async (req, res) => {
   });
 });
 
+
 // Get All Posts
 export const getAllPosts = catchAsync(async (req, res) => {
-  const posts = await Post.find({}).populate('postedBy', 'name');
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  const posts = await Post.find({})
+    .populate('postedBy', 'name')
+    .skip(skip)
+    .limit(limit);
+
   res.status(200).json(posts);
 });
 
