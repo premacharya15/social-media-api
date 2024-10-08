@@ -58,7 +58,7 @@ export const uploadPostImages = catchAsync(async (req, res) => {
       return res.status(400).json({ message: err.message });
     } else if (err) {
       // An unknown error occurred when uploading.
-      return res.status(500).json({ message: 'An error occurred while uploading images.' });
+      return res.status(500).json({ message: err.message });
     }
 
     if (!req.files || req.files.length === 0) {
