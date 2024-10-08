@@ -44,11 +44,15 @@ export const createPost = catchAsync(async (req, res) => {
 // Upload multiple images for a post
 export const uploadPostImages = catchAsync(async (req, res) => {
   const postId = req.params.postId;
-  const uploadMultiple = upload.array('images', 3);
+  const maxImages = 3;
+  const uploadMultiple = upload.array('images', maxImages);
 
   uploadMultiple(req, res, async function(err) {
     if (err instanceof multer.MulterError) {
-      // A Multer error occurred when uploading.
+      if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+        return res.status(400).json({ message: `Too many images. Maximum allowed is ${maxImages}.` });
+      }
+      // Other Multer errors
       return res.status(400).json({ message: err.message });
     } else if (err) {
       // An unknown error occurred when uploading.
