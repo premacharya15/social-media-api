@@ -51,6 +51,8 @@ export const uploadPostImages = catchAsync(async (req, res) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_UNEXPECTED_FILE') {
         return res.status(400).json({ message: `Too many images. Maximum allowed is ${maxImages}.` });
+      } else if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ message: 'File size limit exceeded. Maximum allowed is 5MB per image.' });
       }
       // Other Multer errors
       return res.status(400).json({ message: err.message });
