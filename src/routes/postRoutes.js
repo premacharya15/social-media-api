@@ -7,6 +7,6 @@ const router = express.Router();
 router.get('/all', protect, getAllPosts);
 router.get('/user-posts', protect, getUserPosts);
 router.post('/new', protect, createPost);
-router.post('/:postId/upload-images', protect, uploadPostImages);
+router.post('/:postId', protect, uploadPostImages);
 
 export default router;
