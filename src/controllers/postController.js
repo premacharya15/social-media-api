@@ -23,6 +23,21 @@ export const createPost = catchAsync(async (req, res) => {
     postId: newPost._id,
     userId: postedBy
   });
+
+  // Delete Redis entries after successful post creation
+  if (await isRedisConnected()) {
+    const deletePromises = [
+      client.del(`user_${postedBy}`),
+      client.keys(`user_${postedBy}_allPosts_page_*`).then(keys => {
+        if (keys.length > 0) return client.del(keys);
+      }),
+      client.keys(`user_${postedBy}_userPosts_page_*`).then(keys => {
+        if (keys.length > 0) return client.del(keys);
+      })
+    ];
+    
+    await Promise.all(deletePromises).catch(console.error);
+  }
 });
 
 
@@ -110,12 +125,44 @@ export const getUserPosts = catchAsync(async (req, res) => {
   const limit = parseInt(req.query.limit) || 10;
   const skip = (page - 1) * limit;
 
-  const userPosts = await Post.find({ postedBy: userId })
-                              .skip(skip)
-                              .limit(limit)
-                              .populate('postedBy', 'name');
+  const cacheKey = `user_${userId}_userPosts_page_${page}`;
 
-  res.status(200).json(userPosts);
+  // Check if Redis is connected
+  const redisConnected = await isRedisConnected();
+
+  if (redisConnected) {
+    const cachedResults = await client.get(cacheKey);
+    if (cachedResults) {
+      return res.status(200).json(JSON.parse(cachedResults));
+    }
+  }
+
+  const totalCount = await Post.countDocuments({ postedBy: userId });
+  const totalPages = Math.ceil(totalCount / limit);
+
+  const userPosts = await Post.find({ postedBy: userId })
+    .populate('postedBy', 'name')
+    .skip(skip)
+    .limit(limit)
+    .lean();
+
+  if (userPosts.length === 0) {
+    return res.status(404).json({ message: "No posts found" });
+  }
+
+  const responseData = {
+    posts: userPosts,
+    currentPage: page,
+    totalPages: totalPages,
+    totalCount: totalCount
+  };
+
+  // Cache the results for future requests if Redis is connected
+  if (redisConnected) {
+    await client.set(cacheKey, JSON.stringify(responseData), { EX: 3600 }); // Cache for 1 hour
+  }
+
+  res.status(200).json(responseData);
 });
 
 export { upload };
