@@ -3,6 +3,7 @@ import catchAsync from '../middleware/catchAsync.js';
 import User from '../models/userModel.js';
 import upload from '../utils/uploadImages.js';
 import multer from 'multer';
+import client, { isRedisConnected } from '../utils/redisClient.js';
 
 
 // Create New Post
@@ -56,16 +57,49 @@ export const uploadPostImages = catchAsync(async (req, res) => {
 
 // Get All Posts
 export const getAllPosts = catchAsync(async (req, res) => {
+  const userId = req.user._id;
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const skip = (page - 1) * limit;
 
+  const cacheKey = `user_${userId}_allPosts_page_${page}`;
+
+  // Check if Redis is connected
+  const redisConnected = await isRedisConnected();
+
+  if (redisConnected) {
+    const cachedResults = await client.get(cacheKey);
+    if (cachedResults) {
+      return res.status(200).json(JSON.parse(cachedResults));
+    }
+  }
+
+  const totalCount = await Post.countDocuments();
+  const totalPages = Math.ceil(totalCount / limit);
+
   const posts = await Post.find({})
     .populate('postedBy', 'name')
     .skip(skip)
-    .limit(limit);
+    .limit(limit)
+    .lean();
 
-  res.status(200).json(posts);
+  if (posts.length === 0) {
+    return res.status(404).json({ message: "No posts found" });
+  }
+
+  const responseData = {
+    posts,
+    currentPage: page,
+    totalPages: totalPages,
+    totalCount: totalCount
+  };
+
+  // Cache the results for future requests if Redis is connected
+  if (redisConnected) {
+    await client.set(cacheKey, JSON.stringify(responseData), { EX: 3600 }); // Cache for 1 hour
+  }
+
+  res.status(200).json(responseData);
 });
 
 
