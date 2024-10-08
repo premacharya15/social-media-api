@@ -11,7 +11,6 @@ import { isRedisConnected } from './utils/redisClient.js';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { protect } from './middleware/authMiddleware.js';
 import limiter from './utils/rateLimit.js';
 
 // Manually define __dirname in ESM
@@ -41,7 +40,7 @@ export async function createServer() {
 
   // Serve static files from the upload directory
   const uploadDirectory = path.join(__dirname, 'uploads');
-  app.use('/uploads', protect, express.static(uploadDirectory));
+  app.use('/uploads', express.static(uploadDirectory));
 
   // Serve static files from the public directory
   const publicDirectory = path.join(__dirname, 'public');
