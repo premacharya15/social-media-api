@@ -34,7 +34,7 @@ export async function createServer() {
   app.use(cors({
     origin: '*', // This allows all domains. For production, specify allowed domains.
     methods: ['GET', 'POST', 'PUT', 'DELETE'], // Specify HTTP methods allowed.
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization'] // Authorization header is used for JWT
   }));
 
 
