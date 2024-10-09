@@ -275,6 +275,7 @@ export const updateProfile = catchAsync(async (req, res) => {
   // Delete Redis cache for the user
   if (await isRedisConnected()) {
     await client.del(`user_${userId}`).catch(console.error);
+    await client.del(`user_${userId}_username_${user.username}`).catch(console.error);
   }
 
   res.status(200).json({
@@ -381,6 +382,16 @@ export const discoverPeople = catchAsync(async (req, res) => {
 // get userdetils with username
 export const getUserDetails = catchAsync(async (req, res) => {
     const { username } = req.params;
+    const userId = req.user._id;
+
+    // Try to get data from Redis cache first
+    const cacheKey = `user_${userId}_username_${username}`;
+    if (await isRedisConnected()) {
+        const cachedUserData = await client.get(cacheKey);
+        if (cachedUserData) {
+            return res.status(200).json({ user: JSON.parse(cachedUserData) });
+        }
+    }
 
     const user = await User.findOne({ username })
         .select('_id name bio website username avatar')
@@ -407,6 +418,11 @@ export const getUserDetails = catchAsync(async (req, res) => {
         ...user,
         ...counts
     };
+
+    // Cache the result in Redis if connected
+    if (await isRedisConnected()) {
+        await client.set(cacheKey, JSON.stringify(userData), { EX: 3600 }); // Cache for 1 hour
+    }
 
     res.status(200).json({ user: userData });
 });
@@ -452,6 +468,12 @@ export const followUser = catchAsync(async (req, res) => {
                     if (keys.length > 0) return client.del(keys);
                 }),
                 client.keys(`user_${userId}_search_*`).then(keys => {
+                    if (keys.length > 0) return client.del(keys);
+                }),
+                client.keys(`user_${userId}_username_*`).then(keys => {
+                    if (keys.length > 0) return client.del(keys);
+                }),
+                client.keys(`user_${targetUserId}_username_*`).then(keys => {
                     if (keys.length > 0) return client.del(keys);
                 })
             ];
