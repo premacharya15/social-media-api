@@ -253,3 +253,53 @@ export const likeUnlikePost = catchAsync(async (req, res) => {
         }
     });
 });
+
+
+// Save/Unsave Post
+export const saveUnsavePost = catchAsync(async (req, res, next) => {
+    const postId = req.params.id;
+    const userId = req.user._id;
+
+    const [post, user] = await Promise.all([
+        Post.findById(postId),
+        User.findById(userId)
+    ]);
+
+    if (!post || !user) {
+        return next(new ErrorHandler("Post or User Not Found", 404));
+    }
+
+    const isSaved = post.savedBy.includes(userId);
+    const updateOperation = isSaved
+        ? { $pull: { savedBy: userId } }
+        : { $addToSet: { savedBy: userId } };
+
+    const userUpdateOperation = isSaved
+        ? { $pull: { saved: postId } }
+        : { $addToSet: { saved: postId } };
+
+    await Promise.all([
+        Post.updateOne({ _id: postId }, updateOperation),
+        User.updateOne({ _id: userId }, userUpdateOperation)
+    ]);
+
+    const message = isSaved ? "Post Unsaved" : "Post Saved";
+    res.status(200).json({ message });
+
+    // Asynchronously handle cache deletion
+    setImmediate(async () => {
+        if (await isRedisConnected()) {
+            const deletePromises = [
+                client.del(`post_${postId}`),
+                client.keys(`user_${userId}_allPosts_page_*`).then(keys => {
+                    if (keys.length > 0) return client.del(keys);
+                }),
+                client.keys(`user_${userId}_userPosts_page_*`).then(keys => {
+                    if (keys.length > 0) return client.del(keys);
+                })
+            ];
+            
+            await Promise.all(deletePromises).catch(console.error);
+        }
+    });
+});
