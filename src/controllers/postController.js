@@ -172,3 +172,42 @@ export const getUserPosts = catchAsync(async (req, res) => {
 });
 
 export { upload };
+
+
+// Get Post Details by ID
+export const getPostDetails = catchAsync(async (req, res) => {
+    const postId = req.params.id;
+    const cacheKey = `post_${postId}`;
+
+    // Check if Redis is connected and try to get cached data
+    const cachedPost = await isRedisConnected() && await client.get(cacheKey).catch(() => null);
+    if (cachedPost) {
+        return res.status(200).json(JSON.parse(cachedPost));
+    }
+
+    const post = await Post.findById(postId)
+        .select('id caption createdAt likes savedBy comments postedBy')
+        .populate('postedBy', 'id name username')
+        .lean();
+
+    if (!post) {
+        return res.status(404).json({ message: 'Post not found' });
+    }
+
+    const postDetails = {
+        ...post,
+        likes: post.likes?.length || 0,
+        savedBy: post.savedBy?.length || 0,
+        comments: {
+            _id: post._id,
+            comments: post.comments || []
+        }
+    };
+
+    // Cache the post details asynchronously
+    if (await isRedisConnected()) {
+        client.set(cacheKey, JSON.stringify(postDetails), { EX: 3600 }).catch(() => {});
+    }
+
+    res.status(200).json(postDetails);
+});
