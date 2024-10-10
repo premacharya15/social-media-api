@@ -4,20 +4,20 @@ import { updateUsername, getUsernameSuggestions, getAccountDetails, deleteProfil
 
 const router = express.Router();
 
-router.put('/update-username', protect, updateUsername);
-router.get('/username-suggestions', protect, getUsernameSuggestions);
-router.get('/logout', protect, logoutUser);
-router.get('/discover', protect, discoverPeople);
+router.put('/update-username', protect, updateUsername); // update username
+router.get('/username-suggestions', protect, getUsernameSuggestions); // get username suggestions
+router.get('/logout', protect, logoutUser); // logout user
+router.get('/discover', protect, discoverPeople); // discover people
 
 router.route('/me')
-    .get(protect, getAccountDetails)
-    .put(protect, upload.single('avatar'), updateProfile)
-    .delete(protect, deleteProfile);
+    .get(protect, getAccountDetails) // get account details 
+    .put(protect, upload.single('avatar'), updateProfile) // update profile
+    .delete(protect, deleteProfile); // delete profile
 
-router.get('/search', protect, searchUsers);
+router.get('/search', protect, searchUsers); // search users
 
-router.get('/:username', protect, getUserDetails);
+router.get('/:username', protect, getUserDetails); // get user details by username
 
-router.get('/follow/:id', protect, followUser);
+router.get('/follow/:id', protect, followUser); // follow user  
 
 export default router;
