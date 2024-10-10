@@ -211,3 +211,45 @@ export const getPostDetails = catchAsync(async (req, res) => {
 
     res.status(200).json(postDetails);
 });
+
+
+// Like/Unlike Post
+export const likeUnlikePost = catchAsync(async (req, res) => {
+    const postId = req.params.id;
+    const userId = req.user._id;
+
+    const post = await Post.findById(postId);
+
+    if (!post) {
+        return res.status(404).json({
+            message: "Post Not Found"
+        });
+    }
+
+    const isLiked = post.likes.includes(userId);
+    const updateOperation = isLiked
+        ? { $pull: { likes: userId } }
+        : { $addToSet: { likes: userId } };
+
+    await Post.updateOne({ _id: postId }, updateOperation);
+
+    const message = isLiked ? "Post Unliked" : "Post Liked";
+    res.status(200).json({ message });
+
+    // Asynchronously handle cache deletion
+    setImmediate(async () => {
+        if (await isRedisConnected()) {
+            const deletePromises = [
+                client.del(`post_${postId}`),
+                client.keys(`user_${userId}_allPosts_page_*`).then(keys => {
+                    if (keys.length > 0) return client.del(keys);
+                }),
+                client.keys(`user_${userId}_userPosts_page_*`).then(keys => {
+                    if (keys.length > 0) return client.del(keys);
+                })
+            ];
+            
+            await Promise.all(deletePromises).catch(console.error);
+        }
+    });
+});
