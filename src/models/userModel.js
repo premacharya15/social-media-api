@@ -9,7 +9,6 @@ const userSchema = mongoose.Schema({
   verified: { type: Boolean, default: false },
   bio: { type: String, required: false, default: null },
   website: { type: String, required: false, default: null },
-  avatar: { type: String, required: false }, // URL to the avatar image
   otp: { type: String },
   posts: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Post' }],
   saved: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Post' }],

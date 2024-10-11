@@ -1,40 +1,10 @@
-import { fileURLToPath } from 'url';
 import path from 'path';
-import fs from 'fs';
-import multer from 'multer';
 import User from '../models/userModel.js';
 import catchAsync from '../middleware/catchAsync.js';
 import client, { isRedisConnected } from '../utils/redisClient.js';
 import Post from '../models/postModel.js';
 import { rm } from 'fs/promises';
-
-// Convert URL to path for __dirname equivalent in ESM
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Ensure directory exists
-const ensureDirSync = (dirPath) => {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
-  }
-};
-
-
-// Set up storage for multer
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        const uploadPath = path.join(__dirname, '..', 'uploads', `user_${req.user._id}`);
-        ensureDirSync(uploadPath);
-        cb(null, uploadPath);
-    },
-    filename: function (req, file, cb) {
-        // Use a fixed filename 'avatar' with the original file extension
-        const avatarFilename = `avatar.png`;
-        cb(null, avatarFilename);
-    }
-});
-
-const upload = multer({ storage: storage });
+import upload from '../utils/uploadImages.js';
 
 
 // Get User Details --Logged In User
@@ -252,17 +222,8 @@ export const updateProfile = catchAsync(async (req, res) => {
 
   // Handle avatar update
   if (req.file) {
-    const uploadPath = path.join(__dirname, '..', 'uploads', `user_${userId}`);
-    ensureDirSync(uploadPath);
-    const avatarFilename = `avatar.png`;
-    const fullPath = path.join(uploadPath, avatarFilename);
-    
-    // Use promises for file operations
-    await fs.promises.rename(req.file.path, fullPath);
-    
-    // Convert full path to a relative path with backslashes
-    const relativePath = path.relative(path.join(__dirname, '..'), fullPath).replace(/\//g, '\\');
-    updateFields.avatar = relativePath;
+    // The file is already saved by multer
+    // The original file name is preserved
   }
 
   // Update user and get the updated document

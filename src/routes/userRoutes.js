@@ -1,6 +1,7 @@
 import express from 'express';
 import { protect } from '../middleware/authMiddleware.js';
-import { updateUsername, getUsernameSuggestions, getAccountDetails, deleteProfile, updateProfile, upload, logoutUser, discoverPeople, getUserDetails, followUser, searchUsers } from '../controllers/userController.js';
+import { updateUsername, getUsernameSuggestions, getAccountDetails, deleteProfile, updateProfile, logoutUser, discoverPeople, getUserDetails, followUser, searchUsers } from '../controllers/userController.js';
+import upload from '../utils/uploadImages.js';
 
 const router = express.Router();
 
