@@ -33,6 +33,9 @@ export const createPost = catchAsync(async (req, res) => {
       }),
       client.keys(`user_${postedBy}_userPosts_page_*`).then(keys => {
         if (keys.length > 0) return client.del(keys);
+      }),
+      client.keys(`user_${postedBy}_followingPosts_page_*`).then(keys => {
+        if (keys.length > 0) return client.del(keys);
       })
     ];
     
@@ -302,4 +305,63 @@ export const saveUnsavePost = catchAsync(async (req, res, next) => {
             await Promise.all(deletePromises).catch(console.error);
         }
     });
+});
+
+
+// Get Posts of Following Users
+export const getPostsOfFollowing = catchAsync(async (req, res) => {
+  const userId = req.user._id;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  const cacheKey = `user_${userId}_followingPosts_page_${page}`;
+
+  // Check if Redis is connected
+  const redisConnected = await isRedisConnected();
+
+  if (redisConnected) {
+    const cachedResults = await client.get(cacheKey);
+    if (cachedResults) {
+      return res.status(200).json(JSON.parse(cachedResults));
+    }
+  }
+
+  // Fetch the list of user IDs that the current user is following
+  const user = await User.findById(userId).select('following').lean();
+  const followingIds = user.following.map(id => id.toString());
+
+  // Fetch posts from followed users
+  const followingPosts = await Post.find({ postedBy: { $in: followingIds } })
+    .populate('postedBy', 'name')
+    .sort({ createdAt: 1 })
+    .lean();
+
+  // Fetch posts from non-followed users
+  const nonFollowingPosts = await Post.find({ postedBy: { $nin: followingIds } })
+    .populate('postedBy', 'name')
+    .sort({ createdAt: 1 })
+    .lean();
+
+  // Combine and paginate the results
+  const allPosts = [...followingPosts, ...nonFollowingPosts];
+  const paginatedPosts = allPosts.slice(skip, skip + limit);
+
+  // Add 'suggested' field to non-following posts
+  const responseData = paginatedPosts.map(post => ({
+    ...post,
+    suggested: followingIds.includes(post.postedBy._id.toString()) ? undefined : 'Suggested for you'
+  }));
+
+  // Cache the results for future requests if Redis is connected
+  if (redisConnected) {
+    await client.set(cacheKey, JSON.stringify(responseData), { EX: 3600 }); // Cache for 1 hour
+  }
+
+  res.status(200).json({
+    posts: responseData,
+    currentPage: page,
+    totalPages: Math.ceil(allPosts.length / limit),
+    totalCount: allPosts.length
+  });
 });
