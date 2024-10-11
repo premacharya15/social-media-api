@@ -222,6 +222,9 @@ export const updateProfile = catchAsync(async (req, res) => {
 
   // Handle avatar update
   if (req.file) {
+    if (req.file.size > 5 * 1024 * 1024) {
+      return res.status(400).json({ message: 'File size limit exceeded. Maximum allowed is 5MB for avatar.' });
+    }
     // The file is already saved by multer
     // The original file name is preserved
   }
