@@ -353,15 +353,17 @@ export const getPostsOfFollowing = catchAsync(async (req, res) => {
     suggested: followingIds.includes(post.postedBy._id.toString()) ? undefined : 'Suggested for you'
   }));
 
-  // Cache the results for future requests if Redis is connected
-  if (redisConnected) {
-    await client.set(cacheKey, JSON.stringify(responseData), { EX: 3600 }); // Cache for 1 hour
-  }
-
-  res.status(200).json({
+  const response = {
     posts: responseData,
     currentPage: page,
     totalPages: Math.ceil(allPosts.length / limit),
     totalCount: allPosts.length
-  });
+  };
+
+  // Cache the results for future requests if Redis is connected
+  if (redisConnected) {
+    await client.set(cacheKey, JSON.stringify(response), { EX: 3600 }); // Cache for 1 hour
+  }
+
+  res.status(200).json(response);
 });
