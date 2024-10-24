@@ -484,7 +484,7 @@ export const searchUsers = catchAsync(async (req, res, next) => {
     const totalPages = Math.ceil(totalCount / limit);
 
     const users = await User.find(query)
-        .select('name username avatar followers')
+        .select('_id name username avatar followers')
         .skip(skip)
         .limit(limit)
         .lean();
@@ -505,6 +505,7 @@ export const searchUsers = catchAsync(async (req, res, next) => {
 
         // Conditionally add followers field based on mutual followers count
         const userResponse = {
+            _id: user._id,
             name: user.name,
             username: user.username,
             avatar: user.avatar
