@@ -4,7 +4,7 @@ import catchAsync from '../middleware/catchAsync.js';
 import client, { isRedisConnected } from '../utils/redisClient.js';
 import Post from '../models/postModel.js';
 import { rm } from 'fs/promises';
-import upload from '../utils/uploadImages.js';
+import upload from '../utils/uploadFiles.js';
 
 
 // Get User Details --Logged In User

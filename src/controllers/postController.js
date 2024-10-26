@@ -1,7 +1,7 @@
 import Post from '../models/postModel.js';
 import catchAsync from '../middleware/catchAsync.js';
 import User from '../models/userModel.js';
-import upload from '../utils/uploadImages.js';
+import upload from '../utils/uploadFiles.js';
 import multer from 'multer';
 import client, { isRedisConnected } from '../utils/redisClient.js';
 
@@ -45,7 +45,7 @@ export const createPost = catchAsync(async (req, res) => {
 
 
 // Upload multiple images for a post
-export const uploadPostImages = catchAsync(async (req, res) => {
+export const uploadPostFiles = catchAsync(async (req, res) => {
   const postId = req.params.postId;
   const maxImages = 3;
   const uploadMultiple = upload.array('images', maxImages);
