@@ -18,6 +18,7 @@
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.14",
     "otp-generator": "^4.0.1",
+    "path-to-regexp": "^0.1.12",
     "redis": "^4.6.15"
   }
 }
